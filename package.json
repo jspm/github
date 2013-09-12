@@ -1,0 +1,21 @@
+{
+  "name": "jspm-github",
+  "version": "0.0.1",
+  "description": "",
+  "main": "github.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:jspm/github.git"
+  },
+  "author": "",
+  "license": "BSD-2-Clause",
+  "bugs": {
+    "url": "https://github.com/jspm/github/issues"
+  },
+  "dependencies": {
+    "mkdirp": "~0.3.5"
+  }
+}
