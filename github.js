@@ -7,7 +7,7 @@ var execOpt;
 
 var GithubLocation = function(options) {
   this.baseDir = options.baseDir;
-  this.log = options.log || true;
+  this.log = options.log === false ? false : true;
   execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
