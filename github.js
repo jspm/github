@@ -7,6 +7,7 @@ var execOpt;
 
 var GithubLocation = function(options) {
   this.baseDir = options.baseDir;
+  this.log = options.log || true;
   execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
@@ -68,7 +69,8 @@ GithubLocation.prototype = {
 
   getVersions: function(repo, callback, errback) {
 
-    console.log(new Date() + ': Requesting package github:' + repo);
+    if (this.log)
+      console.log(new Date() + ': Requesting package github:' + repo);
 
     touchRepo(repo, function(notfound) {
 
