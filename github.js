@@ -2,6 +2,7 @@ var exec = require('child_process').exec;
 var fs = require('fs');
 var path = require('path');
 var mkdirp = require('mkdirp');
+var rimraf = require('rimraf');
 
 var execOpt;
 
@@ -18,20 +19,45 @@ var GithubLocation = function(options) {
 var touchRepo = function(repo, callback, errback) {
   var repoFile = repo.replace('/', '#') + '.git';
   // ensure git repo exists, if not do a git clone
-  fs.stat(path.resolve(execOpt.cwd, repoFile), function(err, stats) {
-    if (!err && stats.isDirectory())
+  fs.exists(path.resolve(execOpt.cwd, repoFile, 'config'), function(exists) {
+    if (exists)
       return callback();
 
-    exec('git clone --mirror ' + 'git://github.com/' + repo + '.git ' + repoFile, execOpt, function(err) {
 
-      if (err) {
-        if (err.toString().indexOf('Repository not found') != -1)
-          return callback(true);
-
+    prepDir(path.resolve(execOpt.cwd, repoFile), function(err) {
+      if (err)
         return errback(err);
-      }
+      
+      exec('git clone --mirror ' + 'git://github.com/' + repo + '.git ' + repoFile, execOpt, function(err) {
 
-      callback();
+        if (err) {
+          if (err.toString().indexOf('Repository not found') != -1)
+            return callback(true);
+
+          return errback(err);
+        }
+
+        callback();
+      });
+
+    });
+  });
+}
+
+var prepDir = function(dir, callback) {
+  fs.exists(dir, function(exists) {
+
+    (exists ? rimraf : function(dir, callback) { callback(); })(dir, function(err) {
+      if (err)
+        return callback(err);
+
+      mkdirp(dir, function(err) {
+        if (err)
+          return callback(err);
+
+        callback();
+      });
+
     });
   });
 }
@@ -46,22 +72,22 @@ GithubLocation.prototype = {
     var repoFile = repo.replace('/', '#') + '.git';
 
     // ensure the output directory exists
-    try {
-      mkdirp.sync(outDir);
-    }
-    catch (e) {
-      return errback(e);
-    }
-
-    // do a full download
-    exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err) {
+    // and clear the output directory if necessary
+    prepDir(outDir, function(err) {
       if (err)
         return errback(err);
 
-      exec('git --work-tree=' + outDir + ' --git-dir=' + repoFile + ' reset --hard ' + hash, execOpt, function(err, stdout, stderr) {
+      // do a full download
+      exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err) {
         if (err)
           return errback(err);
-        callback();
+
+        exec('git --work-tree=' + outDir + ' --git-dir=' + repoFile + ' reset --hard ' + hash, execOpt, function(err, stdout, stderr) {
+          if (err)
+            return errback(err);
+          callback();
+        });
+
       });
 
     });
