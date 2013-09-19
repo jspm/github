@@ -78,13 +78,13 @@ GithubLocation.prototype = {
         return errback(err);
 
       // do a full download
-      exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err) {
+      exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err, stdout, stderr) {
         if (err)
-          return errback(err);
+          return errback(stderr);
 
         exec('git --work-tree=' + outDir + ' --git-dir=' + repoFile + ' reset --hard ' + hash, execOpt, function(err, stdout, stderr) {
           if (err)
-            return errback(err);
+            return errback(stderr);
           callback();
         });
 
@@ -105,9 +105,9 @@ GithubLocation.prototype = {
 
       var repoFile = repo.replace('/', '#') + '.git';
 
-      exec('git --git-dir=' + repoFile + ' ls-remote --heads --tags', execOpt, function(err, stdout) {
+      exec('git --git-dir=' + repoFile + ' ls-remote --heads --tags', execOpt, function(err, stdout, stderr) {
         if (err)
-          return errback(err);
+          return errback(stderr);
 
         var versions = {};
         var refs = stdout.split('\n');
