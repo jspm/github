@@ -3,8 +3,8 @@ var fs = require('fs');
 var path = require('path');
 var mkdirp = require('mkdirp');
 var rimraf = require('rimraf');
-var githubAPI = require('github');
-var github = new githubAPI({ version: '3.0.0' });
+//var githubAPI = require('github');
+//var github = new githubAPI({ version: '3.0.0' });
 
 var execOpt;
 
