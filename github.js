@@ -3,6 +3,8 @@ var fs = require('fs');
 var path = require('path');
 var mkdirp = require('mkdirp');
 var rimraf = require('rimraf');
+var githubAPI = require('github');
+var github = new githubAPI({ version: '3.0.0' });
 
 var execOpt;
 
@@ -12,7 +14,7 @@ var GithubLocation = function(options) {
   execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
-    
+    killSignal: 'SIGKILL'
   };
 }
 
@@ -22,7 +24,6 @@ var touchRepo = function(repo, callback, errback) {
   fs.exists(path.resolve(execOpt.cwd, repoFile, 'config'), function(exists) {
     if (exists)
       return callback();
-
 
     prepDir(path.resolve(execOpt.cwd, repoFile), function(err) {
       if (err)
@@ -77,17 +78,23 @@ GithubLocation.prototype = {
       if (err)
         return errback(err);
 
-      // do a full download
-      exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err, stdout, stderr) {
-        if (err)
-          return errback(stderr);
+      touchRepo(repo, function(notfound) {
 
-        exec('git --work-tree=' + outDir + ' --git-dir=' + repoFile + ' reset --hard ' + hash, execOpt, function(err, stdout, stderr) {
+        if (notfound)
+          return callback();
+
+        // do a full download
+        exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err, stdout, stderr) {
           if (err)
             return errback(stderr);
-          callback();
-        });
 
+          exec('git --work-tree=' + outDir + ' --git-dir=' + repoFile + ' reset --hard ' + hash, execOpt, function(err, stdout, stderr) {
+            if (err)
+              return errback(stderr);
+            callback();
+          });
+
+        });
       });
 
     });
@@ -97,14 +104,43 @@ GithubLocation.prototype = {
 
     if (this.log)
       console.log(new Date() + ': Requesting package github:' + repo);
+    /*
+    github.gitdata.getAllReferences({
+      user: repo.split('/')[0],
+      repo: repo.split('/')[1],
+      per_page: 100
+    }, function(err, result) {
+      if (err)
+        return errback(err);
+      if (!result)
+        return errback('No results.');
 
+      var versions = {};
+      for (var i = 0; i < result.length; i++) {
+        if (!result[i])
+          continue;
+        
+        var hash = result[i].object && result[i].object.sha;
+        var refName = result[i].ref;
+
+        if (!hash || !refName)
+          continue;
+
+        if (refName.substr(0, 11) == 'refs/heads/')
+          versions[refName.substr(11)] = hash;
+        else if (refName.substr(0, 10) == 'refs/tags/')
+          versions[refName.substr(10)] = hash;
+      }
+
+      callback(versions);
+    });
+    */
+    var repoFile = repo.replace('/', '#') + '.git';
     touchRepo(repo, function(notfound) {
 
       if (notfound)
         return callback();
-
-      var repoFile = repo.replace('/', '#') + '.git';
-
+    
       exec('git --git-dir=' + repoFile + ' ls-remote --heads --tags', execOpt, function(err, stdout, stderr) {
         if (err)
           return errback(stderr);
@@ -127,7 +163,7 @@ GithubLocation.prototype = {
         callback(versions);
       });
 
-    }, errback);
+    }, errback); 
 
   }
 };
