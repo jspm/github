@@ -114,6 +114,10 @@ GithubLocation.prototype = {
   // always an exact version
   // assumed that this is run after getVersions so the repo exists
   download: function(repo, version, hash, outDir, callback, errback) {
+
+    if (this.log)
+      console.log(new Date() + ': Requesting package github:' + repo);
+
     var repoFile = repo.replace('/', '#') + '.git';
 
       // check if this version tag has release assets associated with it
@@ -221,30 +225,18 @@ GithubLocation.prototype = {
   },
 
   getVersions: function(repo, callback, errback) {
-
-    if (this.log)
-      console.log(new Date() + ': Requesting package github:' + repo);
-    /*
-    github.gitdata.getAllReferences({
-      user: repo.split('/')[0],
-      repo: repo.split('/')[1],
-      per_page: 100
-    }, function(err, result) {
+    exec('git ls-remote git@github.com:' + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
       if (err)
-        return errback(err);
-      if (!result)
-        return errback('No results.');
+        return errback(stderr);
 
       var versions = {};
-      for (var i = 0; i < result.length; i++) {
-        if (!result[i])
+      var refs = stdout.split('\n');
+      for (var i = 0; i < refs.length; i++) {
+        if (!refs[i])
           continue;
         
-        var hash = result[i].object && result[i].object.sha;
-        var refName = result[i].ref;
-
-        if (!hash || !refName)
-          continue;
+        var hash = refs[i].substr(0, refs[i].indexOf('\t'));
+        var refName = refs[i].substr(hash.length + 1);
 
         if (refName.substr(0, 11) == 'refs/heads/')
           versions[refName.substr(11)] = hash;
@@ -254,36 +246,6 @@ GithubLocation.prototype = {
 
       callback(versions);
     });
-    */
-    var repoFile = repo.replace('/', '#') + '.git';
-    touchRepo(repo, function(notfound) {
-
-      if (notfound)
-        return callback();
-    
-      exec('git --git-dir=' + repoFile + ' ls-remote --heads --tags', execOpt, function(err, stdout, stderr) {
-        if (err)
-          return errback(stderr);
-
-        var versions = {};
-        var refs = stdout.split('\n');
-        for (var i = 0; i < refs.length; i++) {
-          if (!refs[i])
-            continue;
-          
-          var hash = refs[i].substr(0, refs[i].indexOf('\t'));
-          var refName = refs[i].substr(hash.length + 1);
-
-          if (refName.substr(0, 11) == 'refs/heads/')
-            versions[refName.substr(11)] = hash;
-          else if (refName.substr(0, 10) == 'refs/tags/')
-            versions[refName.substr(10)] = hash;
-        }
-
-        callback(versions);
-      });
-
-    }, errback); 
 
   }
 };
