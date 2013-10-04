@@ -85,7 +85,11 @@ var checkReleases = function(repo, version, hasRelease, noRelease, errback) {
 
     // run through releases list to see if we have this version tag
     for (var i = 0; i < res.length; i++) {
-      if (res[i].tag_name == version) {
+      var tagName = res[i].tag_name.trim();
+      if (tagName.substr(0, 1) == 'v')
+        tagName = tagName.substr(1).trim();
+
+      if (tagName == version) {
         var firstAsset = res[i].assets[0];
         if (!firstAsset)
           return noRelease();
@@ -114,7 +118,6 @@ GithubLocation.prototype = {
   // always an exact version
   // assumed that this is run after getVersions so the repo exists
   download: function(repo, version, hash, outDir, callback, errback) {
-
     if (this.log)
       console.log(new Date() + ': Requesting package github:' + repo);
 
