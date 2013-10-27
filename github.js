@@ -12,6 +12,8 @@ var zlib = require('zlib');
 
 var execOpt;
 
+var https;
+
 var GithubLocation = function(options) {
   this.baseDir = options.baseDir;
   this.log = options.log === false ? false : true;
@@ -20,6 +22,7 @@ var GithubLocation = function(options) {
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL'
   };
+  https = options.https || false;
 }
 
 var touchRepo = function(repo, callback, errback) {
@@ -33,7 +36,7 @@ var touchRepo = function(repo, callback, errback) {
       if (err)
         return errback(err);
       
-      exec('git clone --mirror ' + 'git://github.com/' + repo + '.git ' + repoFile, execOpt, function(err) {
+      exec('git clone --mirror ' + (https ? 'https://github.com/' : 'git://github.com/') + repo + '.git ' + repoFile, execOpt, function(err) {
 
         if (err) {
           if (err.toString().indexOf('Repository not found') != -1)
@@ -228,7 +231,7 @@ GithubLocation.prototype = {
   },
 
   getVersions: function(repo, callback, errback) {
-    exec('git ls-remote git@github.com:' + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+    exec('git ls-remote https://github.com/' + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
       if (err)
         return errback(stderr);
 
