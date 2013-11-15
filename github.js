@@ -147,24 +147,15 @@ GithubLocation.prototype = {
                 return errback(err);
 
               // now rename tmpDir/dist to outDir
-              fs.readdir(tmpDir, function(err, files) {
+              // now rename tmpDir/dist to outDir
+              prepDir(outDir, function(err) {
                 if (err)
                   return errback(err);
-
-                if (!files.length || files.length > 1)
-                  return callback();
-
-                clearDir(outDir, function(err) {
+                fs.rename(tmpDir, outDir, function(err) {
                   if (err)
                     return errback(err);
-                  fs.rename(path.resolve(tmpDir, files[0]), outDir, function(err) {
-                    if (err)
-                      return errback(err);
 
-                    fs.unlink(tmpFile, function() {
-                      fs.rmdir(tmpDir, callback);
-                    });
-                  });
+                  fs.unlink(tmpFile, callback);
                 });
               });
             });
