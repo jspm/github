@@ -28,7 +28,7 @@ var GithubLocation = function(options) {
   };
   https = options.https || false;
 
-  remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : ('git://' + (username ? (username + ':' + password + '@') + 'github.com/');
+  remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : 'git://@github.com/';
 }
 
 var touchRepo = function(repo, callback, errback) {
@@ -224,7 +224,7 @@ GithubLocation.prototype = {
               });
 
             });
-          });
+          }, errback);
 
 
         });
