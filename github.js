@@ -147,7 +147,6 @@ GithubLocation.prototype = {
                 return errback(err);
 
               // now rename tmpDir/dist to outDir
-              // now rename tmpDir/dist to outDir
               prepDir(outDir, function(err) {
                 if (err)
                   return errback(err);
@@ -165,13 +164,14 @@ GithubLocation.prototype = {
         // has a release archive
         request({
           uri: archiveURL, 
-          headers: { 'accept': 'application/octet-stream' },
+          headers: { 
+            'accept': 'application/octet-stream', 
+            'user-agent': 'jspm'
+          },
           strictSSL: false
-        })
-        .on('response', function(archiveRes) {
-
+        }).on('response', function(archiveRes) {
           if (archiveRes.statusCode != 200)
-            return errback('Bad response code ' + archiveRes.statusCode);
+            return errback('Bad response code ' + archiveRes.statusCode + '\n' + archiveRes.headers);
           
           if (archiveRes.headers['content-length'] > 10000000)
             return errback('Response too large.');
