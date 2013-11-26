@@ -28,7 +28,7 @@ var GithubLocation = function(options) {
   };
   https = options.https || false;
 
-  remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : 'git://@github.com/';
+  remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : 'git://github.com/';
 }
 
 var touchRepo = function(repo, callback, errback) {
@@ -235,8 +235,11 @@ GithubLocation.prototype = {
 
   getVersions: function(repo, callback, errback) {
     exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
-      if (err)
+      if (err) {
+        if ((err + '').indexOf('Repository not found') != -1)
+          return callback();
         return errback(stderr);
+      }
 
       var versions = {};
       var refs = stdout.split('\n');
