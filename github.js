@@ -14,15 +14,21 @@ var execOpt;
 
 var https;
 
+var log, username, password;
+var remoteString;
 var GithubLocation = function(options) {
   this.baseDir = options.baseDir;
-  this.log = options.log === false ? false : true;
+  log = options.log === false ? false : true;
+  username = options.username;
+  password = options.password;
   execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL'
   };
   https = options.https || false;
+
+  remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : ('git://' + (username ? (username + ':' + password + '@') + 'github.com/');
 }
 
 var touchRepo = function(repo, callback, errback) {
@@ -36,7 +42,7 @@ var touchRepo = function(repo, callback, errback) {
       if (err)
         return errback(err);
       
-      exec('git clone --mirror ' + (https ? 'https://github.com/' : 'git://github.com/') + repo + '.git ' + repoFile, execOpt, function(err) {
+      exec('git clone --mirror ' + remoteString + repo + '.git ' + repoFile, execOpt, function(err) {
 
         if (err) {
           if (err.toString().indexOf('Repository not found') != -1)
@@ -79,6 +85,12 @@ var prepDir = function(dir, callback) {
 }
 
 var checkReleases = function(repo, version, hasRelease, noRelease, errback) {
+  if (username)
+    github.authenticate({
+      type: 'basic',
+      username: username,
+      password: password
+    });
   github.repos.listReleases({
     user: repo.split('/')[0],
     repo: repo.split('/')[1]
@@ -121,7 +133,7 @@ GithubLocation.prototype = {
   // always an exact version
   // assumed that this is run after getVersions so the repo exists
   download: function(repo, version, hash, outDir, callback, errback) {
-    if (this.log)
+    if (log)
       console.log(new Date() + ': Requesting package github:' + repo);
 
     var repoFile = repo.replace('/', '#') + '.git';
@@ -222,7 +234,7 @@ GithubLocation.prototype = {
   },
 
   getVersions: function(repo, callback, errback) {
-    exec('git ls-remote https://github.com/' + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+    exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
       if (err)
         return errback(stderr);
 
