@@ -142,16 +142,25 @@ GithubLocation.prototype = {
       checkReleases(repo, version, function hasRelease(archiveURL, type) {
         var inPipe;
 
+        var downloaded, packageJSON;
+        var complete = function() {
+          if (downloaded && packageJSON)
+            callback(packageJSON);
+        }
+
         if (type == 'tar') {
           inPipe = zlib.createGunzip()
           .pipe(tar.Extract({ path: outDir }))
-          .on('end', callback);
+          .on('end', function() {
+            downloaded = true;
+            complete();
+          });
         }
         else if (type == 'zip') {
           var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
           var tmpFile = tmpDir + '.' + type;
           if (process.platform.match(/^win/))
-            throw 'No unzip support for windows yet due to https://github.com/nearinfinity/node-unzip/issues/33. Please post a jspm-cli issue.';
+            return errback('No unzip support for windows yet due to https://github.com/nearinfinity/node-unzip/issues/33. Please post a jspm-cli issue.');
           inPipe = fs.createWriteStream(tmpFile)
           .on('finish', function() {
             exec('unzip -o ' + tmpFile + ' -d ' + tmpDir, execOpt, function(err) {
@@ -166,12 +175,39 @@ GithubLocation.prototype = {
                   if (err)
                     return errback(err);
 
-                  fs.unlink(tmpFile, callback);
+                  fs.unlink(tmpFile, function() {
+                    downloaded = true;
+                    complete();
+                  });
                 });
               });
             });
           });
         }
+        else {
+          return errback('Github release found, but no archive present.');
+        }
+
+        // in parallel, check the underlying repo for a package.json
+        request({
+          uri: 'https://raw.github.com/' + repo + '/' + hash + '/package.json',
+          strictSSL: false
+        }, function(err, res, body) {
+          if (res.statusCode == 404) {
+            packageJSON = {};
+            return complete();
+          }
+          if (err || res.statusCode != 200)
+            return errback('Unable to check repo package.json for release');
+          try {
+            packageJSON = JSON.parse(body);
+          }
+          catch(e) {
+            return errback('Error parsing package.json');
+          }
+
+          complete();
+        });
 
         // has a release archive
         request({
