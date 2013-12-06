@@ -133,6 +133,11 @@ GithubLocation.prototype = {
   // always an exact version
   // assumed that this is run after getVersions so the repo exists
   download: function(repo, version, hash, outDir, callback, errback) {
+    var _errback = errback;
+    errback = function(err) {
+      console.dir(err);
+      return _errback(err);
+    }
     if (log)
       console.log(new Date() + ': Requesting package github:' + repo);
 
@@ -191,7 +196,11 @@ GithubLocation.prototype = {
         // in parallel, check the underlying repo for a package.json
         request({
           uri: 'https://raw.github.com/' + repo + '/' + hash + '/package.json',
-          strictSSL: false
+          strictSSL: false,
+          auth: {
+            user: username,
+            pass: password
+          }
         }, function(err, res, body) {
           if (res.statusCode == 404) {
             packageJSON = {};
@@ -219,7 +228,7 @@ GithubLocation.prototype = {
           strictSSL: false
         }).on('response', function(archiveRes) {
           if (archiveRes.statusCode != 200)
-            return errback('Bad response code ' + archiveRes.statusCode + '\n' + archiveRes.headers);
+            return errback('Bad response code ' + archiveRes.statusCode + '\n' + JSON.sringify(archiveRes.headers));
           
           if (archiveRes.headers['content-length'] > 10000000)
             return errback('Response too large.');
