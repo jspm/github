@@ -31,33 +31,6 @@ var GithubLocation = function(options) {
   remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : 'git://github.com/';
 }
 
-var touchRepo = function(repo, callback, errback) {
-  var repoFile = repo.replace('/', '#') + '.git';
-  // ensure git repo exists, if not do a git clone
-  fs.exists(path.resolve(execOpt.cwd, repoFile, 'config'), function(exists) {
-    if (exists)
-      return callback();
-
-    prepDir(path.resolve(execOpt.cwd, repoFile), function(err) {
-      if (err)
-        return errback(err);
-      
-      exec('git clone --mirror ' + remoteString + repo + '.git ' + repoFile, execOpt, function(err) {
-
-        if (err) {
-          if (err.toString().indexOf('Repository not found') != -1)
-            return callback(true);
-
-          return errback(err);
-        }
-
-        callback();
-      });
-
-    });
-  });
-}
-
 var clearDir = function(dir, callback) {
   fs.exists(dir, function(exists) {
 
@@ -140,8 +113,6 @@ GithubLocation.prototype = {
     }
     if (log)
       console.log(new Date() + ': Requesting package github:' + repo);
-
-    var repoFile = repo.replace('/', '#') + '.git';
 
       // check if this version tag has release assets associated with it
       checkReleases(repo, version, function hasRelease(archiveURL, type) {
@@ -245,34 +216,33 @@ GithubLocation.prototype = {
 
       }, function noRelease() {
 
-        // ensure the output directory exists
-        // and clear the output directory if necessary
-        prepDir(outDir, function(err) {
-          if (err)
-            return errback(err);
+        request({
+          uri: 'https://github.com/' + repo + '/archive/' + version + '.tar.gz', 
+          headers: { 'accept': 'application/octet-stream' },
+          strictSSL: false
+        })
+        .on('response', function(pkgRes) {
 
-          // no release archive
-          touchRepo(repo, function(notfound) {
+          if (pkgRes.statusCode != 200)
+            return errback('Bad response code ' + pkgRes.statusCode);
+          
+          if (pkgRes.headers['content-length'] > 10000000)
+            return errback('Response too large.');
 
-            if (notfound)
-              return callback();
+          pkgRes.pause();
 
-            // do a full download
-            exec('git --git-dir=' + repoFile + ' remote update', execOpt, function(err, stdout, stderr) {
-              if (err)
-                return errback(stderr);
+          var gzip = zlib.createGunzip();
 
-              exec('git --work-tree=' + outDir + ' --git-dir=' + repoFile + ' reset --hard ' + hash, execOpt, function(err, stdout, stderr) {
-                if (err)
-                  return errback(stderr);
-                callback();
-              });
+          pkgRes
+          .pipe(gzip)
+          .pipe(tar.Extract({ path: outDir }))
+          .on('error', errback)
+          .on('end', callback);
 
-            });
-          }, errback);
+          pkgRes.resume();
 
-
-        });
+        })
+        .on('error', errback);
 
       }, errback);
 
