@@ -126,7 +126,7 @@ GithubLocation.prototype = {
 
         if (type == 'tar') {
           inPipe = zlib.createGunzip()
-          .pipe(tar.Extract({ path: outDir }))
+          .pipe(tar.Extract({ path: outDir, strip: 1 }))
           .on('end', function() {
             downloaded = true;
             complete();
@@ -235,7 +235,7 @@ GithubLocation.prototype = {
 
           pkgRes
           .pipe(gzip)
-          .pipe(tar.Extract({ path: outDir }))
+          .pipe(tar.Extract({ path: outDir, strip: 1 }))
           .on('error', errback)
           .on('end', callback);
 
