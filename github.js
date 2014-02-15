@@ -74,8 +74,6 @@ var checkReleases = function(repo, version, hasRelease, noRelease, errback) {
     // run through releases list to see if we have this version tag
     for (var i = 0; i < res.length; i++) {
       var tagName = res[i].tag_name.trim();
-      if (tagName.substr(0, 1) == 'v')
-        tagName = tagName.substr(1).trim();
 
       if (tagName == version) {
         var firstAsset = res[i].assets[0];
@@ -108,7 +106,6 @@ GithubLocation.prototype = {
   download: function(repo, version, hash, outDir, callback, errback) {
     var _errback = errback;
     errback = function(err) {
-      console.dir(err);
       return _errback(err);
     }
     if (log)
@@ -165,14 +162,17 @@ GithubLocation.prototype = {
         }
 
         // in parallel, check the underlying repo for a package.json
-        request({
+        var reqOptions = {
           uri: 'https://raw.github.com/' + repo + '/' + hash + '/package.json',
-          strictSSL: false,
-          auth: {
+          strictSSL: false
+        };
+        if (username)
+          reqOptions.auth = {
             user: username,
             pass: password
-          }
-        }, function(err, res, body) {
+          };
+        
+        request(reqOptions, function(err, res, body) {
           if (res.statusCode == 404) {
             packageJSON = {};
             return complete();
