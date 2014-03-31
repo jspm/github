@@ -249,14 +249,51 @@ GithubLocation.prototype = {
   },
 
   getVersions: function(repo, callback, errback) {
+
+    var passed = 0;
+    var error = false;
+    var versions;
+
+    // request the repo to check that it isn't a redirect!
+    request({
+      uri: 'https://github.com/' + repo,
+      strictSSL: false,
+      followRedirect: false
+    })
+    .on('response', function(res) {
+      //not found
+      if (res.statusCode == 301 || res.statusCode == 404) {
+        error = true;
+        return callback();
+      }
+      //other error
+      else if (res.statusCode != 200) {
+        error = true;
+        return errback(res.statusCode);
+      }
+      if (error)
+        return;
+      
+      passed++;
+
+      if (passed == 2)
+        callback(versions);
+    })
+    .on('error', function(err) {
+      error = true;
+      errback(err);
+    });
+
     exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+
       if (err) {
+        error = true;
         if ((err + '').indexOf('Repository not found') != -1)
           return callback();
         return errback(stderr);
       }
 
-      var versions = {};
+      versions = {};
       var refs = stdout.split('\n');
       for (var i = 0; i < refs.length; i++) {
         if (!refs[i])
@@ -271,9 +308,10 @@ GithubLocation.prototype = {
           versions[refName.substr(10)] = hash;
       }
 
-      callback(versions);
+      passed++;
+      if (passed == 2)
+        callback(versions);
     });
-
   }
 };
 
