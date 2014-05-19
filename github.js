@@ -97,6 +97,31 @@ var checkReleases = function(repo, version, hasRelease, noRelease, errback) {
   });
 }
 
+
+// check if the given directory contains one directory only
+// so that when we unzip, we should use the inner directory as
+// the directory
+function checkStripDir(dir, callback, errback) {
+  fs.readdir(dir, function(err, files) {
+    if (err)
+      return errback(err);
+
+    if (files.length > 1)
+      return callback(dir);
+
+    var dirPath = path.resolve(dir, files[0]);
+
+    fs.stat(dirPath, function(err, stat) {
+      if (err)
+        return errback(err);
+      if (stat.isDirectory())
+        return callback(dirPath);
+      return callback(dir);
+    });
+  });
+}
+
+
 GithubLocation.prototype = {
 
   degree: 2,
@@ -136,24 +161,31 @@ GithubLocation.prototype = {
             return errback('No unzip support for windows yet due to https://github.com/nearinfinity/node-unzip/issues/33. Please post a jspm-cli issue.');
           inPipe = fs.createWriteStream(tmpFile)
           .on('finish', function() {
-            exec('unzip -o ' + tmpFile + ' -d ' + tmpDir, execOpt, function(err) {
+            exec('unzip -o ' + tmpFile + ' -d ' + tmpDir + ' && chmod -R +w ' + tmpDir, execOpt, function(err) {
               if (err)
                 return errback(err);
 
-              // now rename tmpDir/dist to outDir
-              prepDir(outDir, function(err) {
-                if (err)
-                  return errback(err);
-                fs.rename(tmpDir, outDir, function(err) {
+              // check if it extracted to a single dir and use that
+              checkStripDir(tmpDir, function(repoDir) {
+                // now rename tmpDir/dist to outDir
+                prepDir(outDir, function(err) {
                   if (err)
                     return errback(err);
+                  fs.rename(repoDir, outDir, function(err) {
+                    if (err)
+                      return errback(err);
 
-                  fs.unlink(tmpFile, function() {
-                    downloaded = true;
-                    complete();
+                    // if it was a subdir, remove the base dir too
+                    if (repoDir != tmpDir)
+                      fs.rmdirSync(tmpDir);
+
+                    fs.unlink(tmpFile, function() {
+                      downloaded = true;
+                      complete();
+                    });
                   });
                 });
-              });
+              }, errback);
             });
           });
         }
@@ -163,7 +195,7 @@ GithubLocation.prototype = {
 
         // in parallel, check the underlying repo for a package.json
         var reqOptions = {
-          uri: 'https://raw.github.com/' + repo + '/' + hash + '/package.json',
+          uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
           strictSSL: false
         };
         if (username)
@@ -201,7 +233,7 @@ GithubLocation.prototype = {
           if (archiveRes.statusCode != 200)
             return errback('Bad response code ' + archiveRes.statusCode + '\n' + JSON.sringify(archiveRes.headers));
           
-          if (archiveRes.headers['content-length'] > 10000000)
+          if (archiveRes.headers['content-length'] > 100000000)
             return errback('Response too large.');
 
           archiveRes.pause();
@@ -304,8 +336,12 @@ GithubLocation.prototype = {
 
         if (refName.substr(0, 11) == 'refs/heads/')
           versions[refName.substr(11)] = hash;
-        else if (refName.substr(0, 10) == 'refs/tags/')
-          versions[refName.substr(10)] = hash;
+        else if (refName.substr(0, 10) == 'refs/tags/') {
+          if (refName.substr(refName.length - 3, 3) == '^{}')
+            versions[refName.substr(10, refName.length - 13)] = hash;
+          else
+            versions[refName.substr(10)] = hash;
+        }
       }
 
       passed++;
