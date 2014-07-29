@@ -16,6 +16,7 @@ var https;
 
 var log, username, password;
 var remoteString;
+var apiRemoteString;
 var GithubLocation = function(options) {
   this.baseDir = options.baseDir;
   log = options.log === false ? false : true;
@@ -29,6 +30,7 @@ var GithubLocation = function(options) {
   https = options.https || false;
 
   remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : 'git://github.com/';
+  apiRemoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'api.github.com/repos/';
 }
 
 var clearDir = function(dir, callback) {
@@ -249,7 +251,7 @@ GithubLocation.prototype = {
       }, function noRelease() {
 
         request({
-          uri: 'https://github.com/' + repo + '/archive/' + version + '.tar.gz', 
+          uri: remoteString + repo + '/archive/' + version + '.tar.gz',
           headers: { 'accept': 'application/octet-stream' },
           strictSSL: false
         })
@@ -288,7 +290,10 @@ GithubLocation.prototype = {
 
     // request the repo to check that it isn't a redirect!
     request({
-      uri: 'https://github.com/' + repo,
+      uri: apiRemoteString + repo,
+      headers: {
+          'User-Agent': "jspm"
+      },
       strictSSL: false,
       followRedirect: false
     })
