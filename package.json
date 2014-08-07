@@ -1,6 +1,6 @@
 {
   "name": "jspm-github",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "",
   "main": "github.js",
   "scripts": {
