@@ -17,6 +17,10 @@ var https;
 var log, username, password;
 var remoteString;
 var apiRemoteString;
+var gitRemoteString;
+
+var isWin = process.platform === 'win32';
+
 var GithubLocation = function(options) {
   this.baseDir = options.baseDir;
   log = options.log === false ? false : true;
@@ -29,7 +33,11 @@ var GithubLocation = function(options) {
   };
   https = options.https || false;
 
-  remoteString = https ? ('https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/') : 'git://github.com/';
+  if (isWin)
+    https = true;
+
+  remoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/';
+  gitRemoteString = https ? remoteString : 'git://github.com/';
   apiRemoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'api.github.com/repos/';
 }
 
@@ -196,6 +204,8 @@ GithubLocation.prototype = {
         }
 
         // in parallel, check the underlying repo for a package.json
+
+        // NB what are the implications of this for private repos?
         var reqOptions = {
           uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
           strictSSL: false
@@ -321,7 +331,7 @@ GithubLocation.prototype = {
       errback(err);
     });
 
-    exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+    exec('git ls-remote ' + gitRemoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
 
       if (err) {
         error = true;
