@@ -26,6 +26,8 @@ var GithubLocation = function(options) {
     killSignal: 'SIGKILL'
   };
 
+  this.remote = options.remote;
+
   remoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/';
   apiRemoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'api.github.com/';
 }
@@ -123,6 +125,12 @@ GithubLocation.prototype = {
     };
   },
 
+  configure: function(config) {
+    config.name = 'github';
+    config.remote = 'https://github.jspm.io';
+    return Promise.resolve(config);
+  },
+
   // return values
   // { versions: { versionhash } }
   // { redirect: 'newrepo' }
@@ -211,7 +219,7 @@ GithubLocation.prototype = {
 
   // optional hook, allows for quicker dependency resolution
   // since download doesn't block dependencies
-  loadConfig: function(repo, version, hash) {
+  getPackageConfig: function(repo, version, hash) {
     // NB ensure this works for private repos
     var reqOptions = {
       uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
