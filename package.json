@@ -1,6 +1,6 @@
 {
   "name": "jspm-github",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "",
   "main": "github.js",
   "scripts": {
@@ -21,6 +21,7 @@
     "request": "~2.40.0",
     "rimraf": "~2.2.2",
     "rsvp": "^3.0.13",
+    "semver": "^3.0.1",
     "tar": "~0.1.18"
   }
 }

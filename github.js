@@ -11,15 +11,22 @@ var asp = require('rsvp').denodeify;
 var tar = require('tar');
 var zlib = require('zlib');
 
+var semver = require('semver');
+
 var execOpt;
 
 var username, password;
 var remoteString;
 var apiRemoteString;
 
-var GithubLocation = function(options) {
+var GithubLocation = function(options, ui) {
   username = options.username;
   password = options.password;
+
+  if (!username) {
+    ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint configure github% to set this up.\n');
+  }
+
   execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
@@ -113,6 +120,34 @@ function checkStripDir(dir) {
   });
 }
 
+var vPrefixVersions = [];
+
+// static configuration function
+GithubLocation.configure = function(config, ui) {
+  config.name = 'github';
+  config.remote = 'https://github.jspm.io';
+
+  return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
+  .then(function(auth) {
+    if (!auth)
+      return;
+
+    return Promise.resolve()
+    .then(function() {
+      return ui.input('Enter your GitHub username');
+    })
+    .then(function(username) {
+      config.username = username;
+      return ui.input('Enter your GitHub password', null, true);
+    })
+    .then(function(password) {
+      config.password = password;
+    });
+  })
+  .then(function() {
+    return config;
+  });
+}
 
 GithubLocation.prototype = {
 
@@ -123,12 +158,6 @@ GithubLocation.prototype = {
       package: packageName,
       path: parts.join('/')
     };
-  },
-
-  configure: function(config) {
-    config.name = 'github';
-    config.remote = 'https://github.jspm.io';
-    return Promise.resolve(config);
   },
 
   // return values
@@ -198,15 +227,26 @@ GithubLocation.prototype = {
           
           var hash = refs[i].substr(0, refs[i].indexOf('\t'));
           var refName = refs[i].substr(hash.length + 1);
+          var version;
 
           if (refName.substr(0, 11) == 'refs/heads/')
-            versions[refName.substr(11)] = hash;
+            version = refName.substr(11);
+            
           else if (refName.substr(0, 10) == 'refs/tags/') {
             if (refName.substr(refName.length - 3, 3) == '^{}')
-              versions[refName.substr(10, refName.length - 13)] = hash;
+              version = refName.substr(10, refName.length - 13);
             else
-              versions[refName.substr(10)] = hash;
+              version = refName.substr(10);
           }
+
+          if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
+            version = version.substr(1);
+            // note when we remove a "v" which versions we need to add it back to
+            // to work out the tag version again
+            vPrefixVersions.push(repo + '@' + version);
+          }
+
+          versions[version] = hash;
         }
 
         passed++;
@@ -220,6 +260,9 @@ GithubLocation.prototype = {
   // optional hook, allows for quicker dependency resolution
   // since download doesn't block dependencies
   getPackageConfig: function(repo, version, hash) {
+    if (vPrefixVersions.indexOf(repo + '@' + version) != -1)
+      version = 'v' + version;
+
     // NB ensure this works for private repos
     var reqOptions = {
       uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
@@ -255,6 +298,8 @@ GithubLocation.prototype = {
   // always an exact version
   // assumed that this is run after getVersions so the repo exists
   download: function(repo, version, hash, outDir) {
+    if (vPrefixVersions.indexOf(repo + '@' + version) != -1)
+      version = 'v' + version;
     
     return checkReleases(repo, version)
     .then(function(release) {
