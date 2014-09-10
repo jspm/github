@@ -35,8 +35,8 @@ var GithubLocation = function(options, ui) {
 
   this.remote = options.remote;
 
-  remoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'github.com/';
-  apiRemoteString = 'https://' + (username ? (username + ':' + password + '@') : '') + 'api.github.com/';
+  remoteString = 'https://' + (username ? (encodeURIComponent(username) + ':' + encodeURIComponent(password) + '@') : '') + 'github.com/';
+  apiRemoteString = 'https://' + (username ? (encodeURIComponent(username) + ':' + encodeURIComponent(password) + '@') : '') + 'api.github.com/';
 }
 
 function clearDir(dir) {
