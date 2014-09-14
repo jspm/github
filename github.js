@@ -20,11 +20,13 @@ var remoteString;
 var apiRemoteString;
 
 var GithubLocation = function(options, ui) {
+  this.name = options.name;
+  
   username = options.username;
   password = options.password;
 
   if (!username) {
-    ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint configure github% to set this up.\n');
+    ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint config ' + options.name + '% to set this up.\n');
   }
 
   execOpt = {
@@ -124,8 +126,7 @@ var vPrefixVersions = [];
 
 // static configuration function
 GithubLocation.configure = function(config, ui) {
-  config.name = 'github';
-  config.remote = 'https://github.jspm.io';
+  config.remote = config.remote || 'https://github.jspm.io';
 
   return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
   .then(function(auth) {
@@ -165,6 +166,7 @@ GithubLocation.prototype = {
   // { redirect: 'newrepo' }
   // { notfound: true }
   lookup: function(repo) {
+    var self = this;
     return new Promise(function(resolve, reject) {
 
       var versions, cancel, passed = 0;
@@ -191,6 +193,10 @@ GithubLocation.prototype = {
         if (res.statusCode == 404) {
           cancel = true;
           return resolve({ notfound: true });
+        }
+        else if (res.statusCode == 401) {
+          cancel = true;
+          return reject('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.');
         }
         //other error
         else if (res.statusCode != 200) {
