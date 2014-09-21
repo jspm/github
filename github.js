@@ -135,13 +135,15 @@ GithubLocation.configure = function(config, ui) {
 
     return Promise.resolve()
     .then(function() {
+      ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://github.com/settings/applications%.');
       return ui.input('Enter your GitHub username');
     })
     .then(function(username) {
       config.username = username;
-      return ui.input('Enter your GitHub password', null, true);
+      return ui.input('Enter your GitHub password or access token', null, true);
     })
     .then(function(password) {
+      ui.log('info', '');
       config.password = password;
     });
   })
