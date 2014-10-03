@@ -58,14 +58,22 @@ function prepDir(dir) {
 
 function checkReleases(repo, version) {
 
-  return asp(request)({
+  var reqOptions = {
     uri: apiRemoteString + 'repos' + repo + '/releases',
     headers: {
       'User-Agent': 'jspm'
     },
     strictSSL: false,
     followRedirect: false
-  })
+  };
+
+  if (username)
+    reqOptions.auth = {
+      user: username,
+      pass: password
+    };
+
+  return asp(request)(reqOptions)
   .then(function(res) {
     try {
       return JSON.parse(res.body);
@@ -175,7 +183,7 @@ GithubLocation.prototype = {
 
       // request the repo to check that it isn't a redirect
       request({
-        uri: apiRemoteString + 'repos/' + repo,
+        uri: remoteString + repo,
         headers: {
           'User-Agent': 'jspm'
         },
@@ -189,7 +197,7 @@ GithubLocation.prototype = {
         // redirect
         if (res.statusCode == 301) {
           cancel = true;
-          return resolve({ redirect: res.headers.location.split('/').splice(3) });
+          return resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
         }
         //not found
         if (res.statusCode == 404) {
