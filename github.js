@@ -223,11 +223,11 @@ GithubLocation.prototype = {
           return;
 
         if (err) {
-          if ((err + '').indexOf('Repository not found') == -1) {
-            cancel = true;
-            return resolve({ notfound: true });
-          }
-          return;
+          cancel = true;
+          if ((err + '').indexOf('Repository not found') == -1)
+            reject(stderr);
+          else
+            resolve({ notfound: true });
         }
 
         versions = {};
