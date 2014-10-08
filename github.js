@@ -199,17 +199,12 @@ GithubLocation.prototype = {
           cancel = true;
           return resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
         }
-        //not found
-        if (res.statusCode == 404) {
-          cancel = true;
-          return resolve({ notfound: true });
-        }
         else if (res.statusCode == 401) {
           cancel = true;
           return reject('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.');
         }
-        //other error
-        else if (res.statusCode != 200) {
+        // other error (allow 404 for private repos)
+        else if (res.statusCode != 200 && res.statusCode != 404) {
           cancel = true;
           return reject('Invalid status code ' + res.statusCode);
         }
@@ -230,7 +225,7 @@ GithubLocation.prototype = {
         if (err) {
           if ((err + '').indexOf('Repository not found') == -1) {
             cancel = true;
-            reject(stderr);
+            return resolve({ notfound: true });
           }
           return;
         }
