@@ -19,11 +19,15 @@ var username, password;
 var remoteString;
 var apiRemoteString;
 
+var max_repo_size;
+
 var GithubLocation = function(options, ui) {
   this.name = options.name;
   
   username = options.username;
   password = options.password;
+
+  max_repo_size = (options.maxRepoSize || 100) * 1024 * 1024;
 
   if (!username) {
     ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint config ' + options.name + '% to set this up.\n');
@@ -156,6 +160,7 @@ GithubLocation.configure = function(config, ui) {
     });
   })
   .then(function() {
+    config.maxRepoSize = config.maxRepoSize || 100;
     return config;
   });
 }
@@ -378,7 +383,7 @@ GithubLocation.prototype = {
           if (archiveRes.statusCode != 200)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.sringify(archiveRes.headers));
           
-          if (archiveRes.headers['content-length'] > 100000000)
+          if (archiveRes.headers['content-length'] > max_repo_size)
             return reject('Response too large.');
 
           archiveRes.pause();
