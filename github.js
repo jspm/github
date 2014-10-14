@@ -176,6 +176,11 @@ GithubLocation.prototype = {
     };
   },
 
+  // given a repo name, locate it and ensure it exists
+  locate: function(repo) {
+
+  },
+
   // return values
   // { versions: { versionhash } }
   // { redirect: 'newrepo' }
