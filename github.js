@@ -178,62 +178,39 @@ GithubLocation.prototype = {
 
   // given a repo name, locate it and ensure it exists
   locate: function(repo) {
+    // request the repo to check that it isn't a redirect
+    return asp(request)({
+      uri: remoteString + repo,
+      headers: {
+        'User-Agent': 'jspm'
+      },
+      strictSSL: false,
+      followRedirect: false
+    }).then(function(res) {
+      // redirect
+      if (res.statusCode == 301)
+        return { redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') };
+      
+      if (res.statusCode == 401)
+        throw 'Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.';
 
+      if (res.statusCode == 404)
+        return { found: false };
+
+      if (res.statusCode == 200)
+        return { found: true };
+
+      throw 'Invalid status code ' + res.statusCode;
+    });
   },
 
   // return values
   // { versions: { versionhash } }
-  // { redirect: 'newrepo' }
   // { notfound: true }
   lookup: function(repo) {
-    var self = this;
     return new Promise(function(resolve, reject) {
-
-      var versions, cancel, passed = 0;
-
-      // request the repo to check that it isn't a redirect
-      request({
-        uri: remoteString + repo,
-        headers: {
-          'User-Agent': 'jspm'
-        },
-        strictSSL: false,
-        followRedirect: false
-      })
-      .on('response', function(res) {
-        if (cancel)
-          return;
-
-        // redirect
-        if (res.statusCode == 301) {
-          cancel = true;
-          return resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
-        }
-        else if (res.statusCode == 401) {
-          cancel = true;
-          return reject('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.');
-        }
-        // other error (allow 404 for private repos)
-        else if (res.statusCode != 200 && res.statusCode != 404) {
-          cancel = true;
-          return reject('Invalid status code ' + res.statusCode);
-        }
-        
-        passed++;
-        if (passed == 2)
-          return resolve({ versions: versions });
-      })
-      .on('error', function(err) {
-        cancel = true;
-        reject(err);
-      });
-
       exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
-        if (cancel)
-          return;
-
         if (err) {
-          cancel = true;
           if ((err + '').indexOf('Repository not found') == -1)
             reject(stderr);
           else
@@ -270,11 +247,8 @@ GithubLocation.prototype = {
           versions[version] = hash;
         }
 
-        passed++;
-        if (passed == 2)
-          resolve({ versions: versions });
+        resolve({ versions: versions });
       });
-
     });
   },
 
