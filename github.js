@@ -46,7 +46,11 @@ var GithubLocation = function(options, ui) {
 }
 
 function clearDir(dir) {
-  return asp(fs.exists)(dir)
+  return new Promise(function(resolve, reject) {
+    fs.exists(dir, function(exists) {
+      resolve(exists);
+    });
+  })
   .then(function(exists) {
     if (exists)
       return asp(rimraf)(dir);
@@ -61,9 +65,9 @@ function prepDir(dir) {
 }
 
 function checkReleases(repo, version) {
-
+  // NB cache this on disk with etags
   var reqOptions = {
-    uri: apiRemoteString + 'repos' + repo + '/releases',
+    uri: apiRemoteString + 'repos/' + repo + '/releases',
     headers: {
       'User-Agent': 'jspm'
     },
@@ -124,13 +128,13 @@ function checkStripDir(dir) {
 
     var dirPath = path.resolve(dir, files[0]);
 
-    return asp(fs.stat)(dirPath);
-  })
-  .then(function(stat) {
-    if (stat.isDirectory())
-      return dirPath;
-    
-    return dir;
+    return asp(fs.stat)(dirPath)
+    .then(function(stat) {
+      if (stat.isDirectory())
+        return dirPath;
+      
+      return dir;
+    });
   });
 }
 
@@ -178,7 +182,9 @@ GithubLocation.prototype = {
 
   // given a repo name, locate it and ensure it exists
   locate: function(repo) {
+    var self = this;
     // request the repo to check that it isn't a redirect
+    // NB cache this locally
     return asp(request)({
       uri: remoteString + repo,
       headers: {
@@ -194,8 +200,9 @@ GithubLocation.prototype = {
       if (res.statusCode == 401)
         throw 'Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.';
 
+      // it might be a private repo, so wait for the lookup to fail as well
       if (res.statusCode == 404)
-        return { found: false };
+        return { found: true };
 
       if (res.statusCode == 200)
         return { found: true };
@@ -258,7 +265,6 @@ GithubLocation.prototype = {
     if (vPrefixVersions.indexOf(repo + '@' + version) != -1)
       version = 'v' + version;
 
-    // NB ensure this works for private repos
     var reqOptions = {
       uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
       strictSSL: false
@@ -303,7 +309,6 @@ GithubLocation.prototype = {
 
       // Download from the release archive
       return new Promise(function(resolve, reject) {
-
         var inPipe;
 
         if (release.type == 'tar') {
@@ -316,10 +321,12 @@ GithubLocation.prototype = {
         }
         else if (release.type == 'zip') {
           var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
-          var tmpFile = tmpDir + '.' + type;
+          var tmpFile = tmpDir + '.' + release.type;
           if (process.platform.match(/^win/))
-            return errback('No unzip support for windows yet due to https://github.com/nearinfinity/node-unzip/issues/33. Please post a jspm-cli issue.');
+            return reject('No unzip support for windows yet due to https://github.com/nearinfinity/node-unzip/issues/33. Please post a jspm-cli issue.');
           
+          var repoDir;
+
           inPipe = fs.createWriteStream(tmpFile)
           .on('finish', function() {
             Promise.resolve()
@@ -329,13 +336,15 @@ GithubLocation.prototype = {
             .then(function() {
               return checkStripDir(tmpDir);
             })
-            .then(function(repoDir) {
-              return prepDir(outDir);
+            .then(function(_repoDir) {
+              repoDir = _repoDir;
+              return asp(fs.rmdir)(outDir);
             })
             .then(function() {
               return asp(fs.rename)(repoDir, outDir);
             })
             .then(function() {
+              return;
               if (repoDir != tmpDir)
                 return asp(fs.rmdir)(tmpDir);
             })
@@ -352,7 +361,7 @@ GithubLocation.prototype = {
 
         // now that the inPipe is ready, do the request
         request({
-          uri: archiveURL, 
+          uri: release.url, 
           headers: { 
             'accept': 'application/octet-stream', 
             'user-agent': 'jspm'
@@ -392,7 +401,7 @@ GithubLocation.prototype = {
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
           
-          if (pkgRes.headers['content-length'] > 10000000)
+          if (pkgRes.headers['content-length'] > max_repo_size)
             return reject('Response too large.');
 
           pkgRes.pause();
