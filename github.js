@@ -201,11 +201,8 @@ GithubLocation.prototype = {
         throw 'Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.';
 
       // it might be a private repo, so wait for the lookup to fail as well
-      if (res.statusCode == 404)
-        return { found: true };
-
-      if (res.statusCode == 200)
-        return { found: true };
+      if (res.statusCode == 404 || res.statusCode == 200)
+        return;
 
       throw 'Invalid status code ' + res.statusCode;
     });
