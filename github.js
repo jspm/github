@@ -138,7 +138,7 @@ function checkStripDir(dir) {
   });
 }
 
-var vPrefixVersions = [];
+var vPrefixVersions = {};
 
 // static configuration function
 GithubLocation.configure = function(config, ui) {
@@ -231,8 +231,10 @@ GithubLocation.prototype = {
           var refName = refs[i].substr(hash.length + 1);
           var version;
 
-          if (refName.substr(0, 11) == 'refs/heads/')
+          if (refName.substr(0, 11) == 'refs/heads/') {
             version = '#' + refName.substr(11);
+            vPrefixVersions[repo + '@' + refName.substr(11)] = false;
+          }
             
           else if (refName.substr(0, 10) == 'refs/tags/') {
             if (refName.substr(refName.length - 3, 3) == '^{}')
@@ -244,8 +246,10 @@ GithubLocation.prototype = {
               version = version.substr(1);
               // note when we remove a "v" which versions we need to add it back to
               // to work out the tag version again
-              vPrefixVersions.push(repo + '@' + version);
+              vPrefixVersions[repo + '@' + version] = true;
             }
+            else
+              vPrefixVersions[repo + '@' + version] = false;
           }
 
           versions[version] = hash;
@@ -259,7 +263,14 @@ GithubLocation.prototype = {
   // optional hook, allows for quicker dependency resolution
   // since download doesn't block dependencies
   getPackageConfig: function(repo, version, hash) {
-    if (vPrefixVersions.indexOf(repo + '@' + version) != -1)
+    if (vPrefixVersions[repo + '@' + version] === undefined) {
+      var self = this;
+      return this.lookup(repo).then(function() {
+        return self.getPackageConfig(repo, version, hash);
+      });
+    }
+
+    if (vPrefixVersions[repo + '@' + version])
       version = 'v' + version;
 
     var reqOptions = {
@@ -296,7 +307,14 @@ GithubLocation.prototype = {
   // always an exact version
   // assumed that this is run after getVersions so the repo exists
   download: function(repo, version, hash, outDir) {
-    if (vPrefixVersions.indexOf(repo + '@' + version) != -1)
+    if (vPrefixVersions[repo + '@' + version] === undefined) {
+      var self = this;
+      return this.lookup(repo).then(function() {
+        return self.download(repo, version, hash, outDir);
+      });
+    }
+
+    if (vPrefixVersions[repo + '@' + version])
       version = 'v' + version;
     
     return checkReleases(repo, version)
@@ -366,7 +384,7 @@ GithubLocation.prototype = {
           strictSSL: false
         }).on('response', function(archiveRes) {
           if (archiveRes.statusCode != 200)
-            return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.sringify(archiveRes.headers));
+            return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
           
           if (archiveRes.headers['content-length'] > max_repo_size)
             return reject('Response too large.');
