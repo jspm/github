@@ -255,6 +255,13 @@ GithubLocation.prototype = {
           versions[version] = hash;
         }
 
+        // for each branch version, check if we have a tag version of the same name
+        // if so, ignore the branch
+        Object.keys(versions).forEach(function(version) {
+          if (version.substr(0, 1) == '#' && versions[version.substr(1)])
+            delete versions[version];
+        });
+
         resolve({ versions: versions });
       });
     });
