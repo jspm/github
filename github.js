@@ -138,8 +138,6 @@ function checkStripDir(dir) {
   });
 }
 
-var vPrefixVersions = {};
-
 // static configuration function
 GithubLocation.configure = function(config, ui) {
   config.remote = config.remote || 'https://github.jspm.io';
@@ -184,27 +182,30 @@ GithubLocation.prototype = {
   locate: function(repo) {
     var self = this;
     // request the repo to check that it isn't a redirect
-    // NB cache this locally
-    return asp(request)({
-      uri: remoteString + repo,
-      headers: {
-        'User-Agent': 'jspm'
-      },
-      strictSSL: false,
-      followRedirect: false
-    }).then(function(res) {
-      // redirect
-      if (res.statusCode == 301)
-        return { redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') };
-      
-      if (res.statusCode == 401)
-        throw 'Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.';
+    return new Promise(function(resolve, reject) {
+      request({
+        uri: remoteString + repo,
+        headers: {
+          'User-Agent': 'jspm'
+        },
+        strictSSL: false,
+        followRedirect: false
+      })
+      .on('response', function(res) {
+        // redirect
+        if (res.statusCode == 301)
+          resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
+        
+        if (res.statusCode == 401)
+          reject(new Error('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.'));
 
-      // it might be a private repo, so wait for the lookup to fail as well
-      if (res.statusCode == 404 || res.statusCode == 200)
-        return;
+        // it might be a private repo, so wait for the lookup to fail as well
+        if (res.statusCode == 404 || res.statusCode == 200)
+          resolve();
 
-      throw 'Invalid status code ' + res.statusCode;
+        reject(new Error('Invalid status code ' + res.statusCode));
+      })
+      .on('error', reject);
     });
   },
 
@@ -230,10 +231,11 @@ GithubLocation.prototype = {
           var hash = refs[i].substr(0, refs[i].indexOf('\t'));
           var refName = refs[i].substr(hash.length + 1);
           var version;
+          var versionObj = { hash: hash, meta: {} };
 
           if (refName.substr(0, 11) == 'refs/heads/') {
-            version = '#' + refName.substr(11);
-            vPrefixVersions[repo + '@' + refName.substr(11)] = false;
+            version = refName.substr(11);
+            versionObj.exactOnly = true;
           }
             
           else if (refName.substr(0, 10) == 'refs/tags/') {
@@ -246,21 +248,12 @@ GithubLocation.prototype = {
               version = version.substr(1);
               // note when we remove a "v" which versions we need to add it back to
               // to work out the tag version again
-              vPrefixVersions[repo + '@' + version] = true;
+              versionObj.meta.vPrefix = true;
             }
-            else
-              vPrefixVersions[repo + '@' + version] = false;
           }
 
-          versions[version] = hash;
+          versions[version] = versionObj;
         }
-
-        // for each branch version, check if we have a tag version of the same name
-        // if so, ignore the branch
-        Object.keys(versions).forEach(function(version) {
-          if (version.substr(0, 1) == '#' && versions[version.substr(1)])
-            delete versions[version];
-        });
 
         resolve({ versions: versions });
       });
@@ -269,15 +262,8 @@ GithubLocation.prototype = {
 
   // optional hook, allows for quicker dependency resolution
   // since download doesn't block dependencies
-  getPackageConfig: function(repo, version, hash) {
-    if (vPrefixVersions[repo + '@' + version] === undefined) {
-      var self = this;
-      return this.lookup(repo).then(function() {
-        return self.getPackageConfig(repo, version, hash);
-      });
-    }
-
-    if (vPrefixVersions[repo + '@' + version])
+  getPackageConfig: function(repo, version, hash, meta) {
+    if (meta.vPrefix)
       version = 'v' + version;
 
     var reqOptions = {
@@ -311,17 +297,8 @@ GithubLocation.prototype = {
     });
   },
 
-  // always an exact version
-  // assumed that this is run after getVersions so the repo exists
-  download: function(repo, version, hash, outDir) {
-    if (vPrefixVersions[repo + '@' + version] === undefined) {
-      var self = this;
-      return this.lookup(repo).then(function() {
-        return self.download(repo, version, hash, outDir);
-      });
-    }
-
-    if (vPrefixVersions[repo + '@' + version])
+  download: function(repo, version, hash, meta, outDir) {
+    if (meta.vPrefix)
       version = 'v' + version;
     
     return checkReleases(repo, version)
