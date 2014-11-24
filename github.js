@@ -36,7 +36,8 @@ var GithubLocation = function(options, ui) {
   execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
-    killSignal: 'SIGKILL'
+    killSignal: 'SIGKILL',
+    maxBuffer: max_repo_size
   };
 
   this.remote = options.remote;
