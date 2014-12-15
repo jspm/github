@@ -13,37 +13,53 @@ var zlib = require('zlib');
 
 var semver = require('semver');
 
-var execOpt;
+function createRemoteStrings(auth) {
+  var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
+  this.remoteString = 'https://' + authString + 'github.com/';
+  this.apiRemoteString = 'https://' + authString + 'api.github.com/';
+}
 
-var username, password;
-var remoteString;
-var apiRemoteString;
-
-var max_repo_size;
+// avoid storing passwords as plain text in config
+function encodeCredentials(auth) {
+  return new Buffer(encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password)).toString('base64');
+}
+function decodeCredentials(str) {
+  var auth = new Buffer(str, 'base64').toString('ascii').split(':');
+  return {
+    username: decodeURIComponent(auth[0]),
+    password: decodeURIComponent(auth[1])
+  };
+}
 
 var GithubLocation = function(options, ui) {
   this.name = options.name;
-  
-  username = options.username;
-  password = options.password;
 
-  max_repo_size = (options.maxRepoSize || 100) * 1024 * 1024;
+  this.max_repo_size = (options.maxRepoSize || 100) * 1024 * 1024;
 
-  if (!username) {
-    ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint config ' + options.name + '% to set this up.\n');
+  // NB deprecate
+  if (options.username && !options.auth) {
+    options.auth = encodeCredentials(options);
+    delete options.username;
+    delete options.password;
   }
 
-  execOpt = {
+  if (!options.auth) {
+    ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint config ' + options.name + '% to set this up.\n');
+  }
+  else {
+    this.auth = decodeCredentials(options.auth);
+  }
+
+  this.execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
-    maxBuffer: max_repo_size
+    maxBuffer: this.max_repo_size
   };
 
   this.remote = options.remote;
 
-  remoteString = 'https://' + (username ? (encodeURIComponent(username) + ':' + encodeURIComponent(password) + '@') : '') + 'github.com/';
-  apiRemoteString = 'https://' + (username ? (encodeURIComponent(username) + ':' + encodeURIComponent(password) + '@') : '') + 'api.github.com/';
+  createRemoteStrings.call(this, this.auth);
 }
 
 function clearDir(dir) {
@@ -64,59 +80,6 @@ function prepDir(dir) {
     return asp(mkdirp)(dir);
   });
 }
-
-function checkReleases(repo, version) {
-  // NB cache this on disk with etags
-  var reqOptions = {
-    uri: apiRemoteString + 'repos/' + repo + '/releases',
-    headers: {
-      'User-Agent': 'jspm'
-    },
-    strictSSL: false,
-    followRedirect: false
-  };
-
-  if (username)
-    reqOptions.auth = {
-      user: username,
-      pass: password
-    };
-
-  return asp(request)(reqOptions)
-  .then(function(res) {
-    try {
-      return JSON.parse(res.body);
-    }
-    catch(e) {
-      throw 'Unable to parse GitHub API response';
-    }
-  })
-  .then(function(releases) {
-    // run through releases list to see if we have this version tag
-    for (var i = 0; i < releases.length; i++) {
-      var tagName = releases[i].tag_name.trim();
-
-      if (tagName == version) {
-        var firstAsset = releases[i].assets[0];
-        if (!firstAsset)
-          return false;
-
-        var assetType;
-
-        if (firstAsset.name.substr(firstAsset.name.length - 7, 7) == '.tar.gz' || firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.tgz')
-          assetType = 'tar';
-        else if (firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.zip')
-          assetType = 'zip';
-        else
-          return false;
-
-        return { url: firstAsset.url, type: assetType };
-      }
-    }
-    return false;
-  });
-}
-
 
 // check if the given directory contains one directory only
 // so that when we unzip, we should use the inner directory as
@@ -139,28 +102,79 @@ function checkStripDir(dir) {
   });
 }
 
+function configureCredentials(ui) {
+  var auth = {};
+
+  return Promise.resolve()
+  .then(function() {
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://github.com/settings/applications%.');
+    return ui.input('Enter your GitHub username');
+  })
+  .then(function(username) {
+    auth.username = username;
+    return ui.input('Enter your GitHub password or access token', null, true);
+  })
+  .then(function(password) {
+    auth.password = password;
+    return ui.confirm('Would you like to test these credentials?', true);
+  })
+  .then(function(test) {
+    if (!test)
+      return true;
+
+    return Promise.resolve()
+    .then(function() {
+      var remotes = {};
+      createRemoteStrings.call(remotes, auth.username, auth.password);
+
+      return asp(request)({
+        uri: remotes.apiRemoteString + 'user',
+        headers: {
+          'User-Agent': 'jspm'
+        },
+        strictSSL: false,
+        followRedirect: false
+      });
+    })
+    .then(function(res) {
+      if (res.statusCode == 401) {
+        ui.log('warn', 'Provided GitHub credentials are not authorized, try re-entering your password or access token.');
+      }
+      else if (res.statusCode != 200) {
+        ui.log('warn', 'Invalid response code, %' + res.statusCode + '%');
+      }
+      else {
+        ui.log('ok', 'GitHub authentication is working successfully.');
+        return true;
+      }
+    }, function(err) {
+      ui.log('err', err.stack || err);
+    });
+  })
+  .then(function(authorized) {
+    if (!authorized)
+      return ui.confirm('Would you like to try new credentials?', true)
+      .then(function(redo) {
+        if (redo)
+          return configureCredentials(ui);
+      });
+    else
+      return encodeCredentials(auth);
+  });
+}
+
+
 // static configuration function
 GithubLocation.configure = function(config, ui) {
   config.remote = config.remote || 'https://github.jspm.io';
 
   return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
   .then(function(auth) {
-    if (!auth)
-      return;
-
-    return Promise.resolve()
-    .then(function() {
-      ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://github.com/settings/applications%.');
-      return ui.input('Enter your GitHub username');
-    })
-    .then(function(username) {
-      config.username = username;
-      return ui.input('Enter your GitHub password or access token', null, true);
-    })
-    .then(function(password) {
-      ui.log('info', '');
-      config.password = password;
-    });
+    if (auth)
+      return configureCredentials(config, ui)
+      .then(function(auth) {
+        config.auth = auth;
+      });
   })
   .then(function() {
     config.maxRepoSize = config.maxRepoSize || 100;
@@ -182,6 +196,7 @@ GithubLocation.prototype = {
   // given a repo name, locate it and ensure it exists
   locate: function(repo) {
     var self = this;
+    var remoteString = this.remoteString;
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request({
@@ -198,7 +213,7 @@ GithubLocation.prototype = {
           resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
         
         if (res.statusCode == 401)
-          reject(new Error('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.'));
+          reject('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.');
 
         // it might be a private repo, so wait for the lookup to fail as well
         if (res.statusCode == 404 || res.statusCode == 200)
@@ -214,6 +229,8 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
+    var execOpt = this.execOpt;
+    var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
       exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
@@ -271,10 +288,10 @@ GithubLocation.prototype = {
       uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
       strictSSL: false
     };
-    if (username)
+    if (this.username)
       reqOptions.auth = {
-        user: username,
-        pass: password
+        user: this.auth.username,
+        pass: this.auth.password
       };
     
     return asp(request)(reqOptions).then(function(res) {
@@ -301,8 +318,12 @@ GithubLocation.prototype = {
   download: function(repo, version, hash, meta, outDir) {
     if (meta.vPrefix)
       version = 'v' + version;
+
+    var execOpt = this.execOpt;
+    var max_repo_size = this.max_repo_size;
+    var remoteString = this.remoteString;
     
-    return checkReleases(repo, version)
+    return this.checkReleases(repo, version)
     .then(function(release) {
       if (!release)
         return true;
@@ -418,7 +439,54 @@ GithubLocation.prototype = {
         .on('error', reject);
       });
     });
+  },
+
+  checkReleases: function(repo, version) {
+    // NB cache this on disk with etags
+    var reqOptions = {
+      uri: this.apiRemoteString + 'repos/' + repo + '/releases',
+      headers: {
+        'User-Agent': 'jspm'
+      },
+      strictSSL: false,
+      followRedirect: false
+    };
+
+    return asp(request)(reqOptions)
+    .then(function(res) {
+      try {
+        return JSON.parse(res.body);
+      }
+      catch(e) {
+        throw 'Unable to parse GitHub API response';
+      }
+    })
+    .then(function(releases) {
+      // run through releases list to see if we have this version tag
+      for (var i = 0; i < releases.length; i++) {
+        var tagName = releases[i].tag_name.trim();
+
+        if (tagName == version) {
+          var firstAsset = releases[i].assets[0];
+          if (!firstAsset)
+            return false;
+
+          var assetType;
+
+          if (firstAsset.name.substr(firstAsset.name.length - 7, 7) == '.tar.gz' || firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.tgz')
+            assetType = 'tar';
+          else if (firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.zip')
+            assetType = 'zip';
+          else
+            return false;
+
+          return { url: firstAsset.url, type: assetType };
+        }
+      }
+      return false;
+    });
   }
+
 };
 
 module.exports = GithubLocation;
