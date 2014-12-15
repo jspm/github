@@ -236,7 +236,7 @@ GithubLocation.prototype = {
 
           if (refName.substr(0, 11) == 'refs/heads/') {
             version = refName.substr(11);
-            versionObj.exactOnly = true;
+            versionObj.stable = false;
           }
             
           else if (refName.substr(0, 10) == 'refs/tags/') {
@@ -322,8 +322,6 @@ GithubLocation.prototype = {
         else if (release.type == 'zip') {
           var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
           var tmpFile = tmpDir + '.' + release.type;
-          if (process.platform.match(/^win/))
-            return reject('No unzip support for windows yet due to https://github.com/nearinfinity/node-unzip/issues/33. Please post a jspm-cli issue.');
           
           var repoDir;
 
