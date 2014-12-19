@@ -171,7 +171,7 @@ GithubLocation.configure = function(config, ui) {
   return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
   .then(function(auth) {
     if (auth)
-      return configureCredentials(config, ui)
+      return configureCredentials(ui)
       .then(function(auth) {
         config.auth = auth;
       });
