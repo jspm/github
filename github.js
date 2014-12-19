@@ -125,7 +125,7 @@ function configureCredentials(ui) {
     return Promise.resolve()
     .then(function() {
       var remotes = {};
-      createRemoteStrings.call(remotes, auth.username, auth.password);
+      createRemoteStrings.call(remotes, auth);
 
       return asp(request)({
         uri: remotes.apiRemoteString + 'user',
