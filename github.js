@@ -130,7 +130,8 @@ function configureCredentials(ui) {
       return asp(request)({
         uri: remotes.apiRemoteString + 'user',
         headers: {
-          'User-Agent': 'jspm'
+          'User-Agent': 'jspm',
+          'Accept': 'application/vnd.github.v3+json'
         },
         strictSSL: false,
         followRedirect: false
@@ -202,7 +203,8 @@ GithubLocation.prototype = {
       request({
         uri: remoteString + repo,
         headers: {
-          'User-Agent': 'jspm'
+          'User-Agent': 'jspm',
+          'Accept': 'application/vnd.github.v3+json'
         },
         strictSSL: false,
         followRedirect: false
@@ -443,7 +445,8 @@ GithubLocation.prototype = {
     var reqOptions = {
       uri: this.apiRemoteString + 'repos/' + repo + '/releases',
       headers: {
-        'User-Agent': 'jspm'
+        'User-Agent': 'jspm',
+        'Accept': 'application/vnd.github.v3+json'
       },
       strictSSL: false,
       followRedirect: false
