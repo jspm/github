@@ -288,7 +288,7 @@ GithubLocation.prototype = {
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
         'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.VERSION.raw'
+        'Accept': 'application/vnd.github.v3.raw'
       },
       strictSSL: false,
     }).then(function(res) {
