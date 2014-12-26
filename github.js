@@ -283,24 +283,21 @@ GithubLocation.prototype = {
   getPackageConfig: function(repo, version, hash, meta) {
     if (meta.vPrefix)
       version = 'v' + version;
-
-    var reqOptions = {
-      uri: 'https://raw.githubusercontent.com/' + repo + '/' + hash + '/package.json',
-      strictSSL: false
-    };
-    if (this.username)
-      reqOptions.auth = {
-        user: this.auth.username,
-        pass: this.auth.password
-      };
     
-    return asp(request)(reqOptions).then(function(res) {
+    return asp(request)({
+      uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
+      headers: {
+        'User-Agent': 'jspm',
+        'Accept': 'application/vnd.github.VERSION.raw'
+      },
+      strictSSL: false,
+    }).then(function(res) {
       if (res.statusCode == 404) {
         // it is quite valid for a repo not to have a package.json
         return {};
       }
       if (res.statusCode != 200)
-        throw 'Unable to check repo package.json for release';
+        throw 'Unable to check repo package.json for release, status code ' + res.statusCode;
       
       var packageJSON;
 
