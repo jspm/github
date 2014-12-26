@@ -1,7 +1,7 @@
 {
   "name": "jspm-github",
-  "version": "0.9.3",
-  "description": "",
+  "version": "0.9.4",
+  "description": "jspm GitHub endpoint",
   "main": "github.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -11,16 +11,19 @@
     "url": "git@github.com:jspm/github.git"
   },
   "author": "",
-  "license": "BSD-2-Clause",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/jspm/github/issues"
   },
   "dependencies": {
+    "graceful-fs": "^3.0.5",
     "mkdirp": "~0.3.5",
     "request": "~2.45.0",
     "rimraf": "~2.2.2",
     "rsvp": "^3.0.13",
     "semver": "^4.0.3",
     "tar": "~0.1.18"
-  }
+  },
+  "homepage": "https://github.com/jspm/github",
+  "devDependencies": {}
 }
