@@ -133,7 +133,6 @@ function configureCredentials(ui) {
           'User-Agent': 'jspm',
           'Accept': 'application/vnd.github.v3+json'
         },
-        strictSSL: false,
         followRedirect: false
       });
     })
@@ -201,12 +200,10 @@ GithubLocation.prototype = {
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request({
-        uri: remoteString + repo,
+        uri: 'https://github.com/' + repo,
         headers: {
-          'User-Agent': 'jspm',
-          'Accept': 'application/vnd.github.v3+json'
+          'User-Agent': 'jspm'
         },
-        strictSSL: false,
         followRedirect: false
       })
       .on('response', function(res) {
@@ -221,7 +218,7 @@ GithubLocation.prototype = {
         if (res.statusCode == 404 || res.statusCode == 200)
           resolve();
 
-        reject(new Error('Invalid status code ' + res.statusCode));
+        reject(new Error('Invalid status code ' + res.statusCode + '\n' + JSON.stringify(res.headers, null, 2)));
       })
       .on('error', reject);
     });
@@ -292,7 +289,6 @@ GithubLocation.prototype = {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3.raw'
       },
-      strictSSL: false,
     }).then(function(res) {
       if (res.statusCode == 404) {
         // it is quite valid for a repo not to have a package.json
@@ -384,7 +380,6 @@ GithubLocation.prototype = {
             'accept': 'application/octet-stream', 
             'user-agent': 'jspm'
           },
-          strictSSL: false
         }).on('response', function(archiveRes) {
           if (archiveRes.statusCode != 200)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
@@ -411,8 +406,7 @@ GithubLocation.prototype = {
       return new Promise(function(resolve, reject) {
         request({
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' },
-          strictSSL: false
+          headers: { 'accept': 'application/octet-stream' }
         })
         .on('response', function(pkgRes) {
 
@@ -448,7 +442,6 @@ GithubLocation.prototype = {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
       },
-      strictSSL: false,
       followRedirect: false
     };
 
