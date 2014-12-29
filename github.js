@@ -289,6 +289,9 @@ GithubLocation.prototype = {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3.raw'
       },
+      qs: {
+        ref: version
+      }
     }).then(function(res) {
       if (res.statusCode == 404) {
         // it is quite valid for a repo not to have a package.json
