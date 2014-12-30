@@ -36,11 +36,11 @@ var GithubLocation = function(options, ui) {
 
   this.max_repo_size = (options.maxRepoSize || 100) * 1024 * 1024;
 
-  // NB deprecate
   if (options.username && !options.auth) {
     options.auth = encodeCredentials(options);
-    delete options.username;
-    delete options.password;
+    // NB deprecate old auth eventually
+    // delete options.username;
+    // delete options.password;
   }
 
   if (!options.auth) {
