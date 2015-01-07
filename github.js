@@ -476,7 +476,7 @@ GithubLocation.prototype = {
           else
             return false;
 
-          return { url: firstAsset.url, type: assetType };
+          return { url: firstAsset.browser_download_url, type: assetType };
         }
       }
       return false;
