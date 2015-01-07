@@ -320,6 +320,8 @@ GithubLocation.prototype = {
     var execOpt = this.execOpt;
     var max_repo_size = this.max_repo_size;
     var remoteString = this.remoteString;
+
+    var self = this;
     
     return this.checkReleases(repo, version)
     .then(function(release) {
@@ -383,20 +385,37 @@ GithubLocation.prototype = {
             'accept': 'application/octet-stream', 
             'user-agent': 'jspm'
           },
+          followRedirect: false,
+          auth: {
+            user: self.auth.username,
+            pass: self.auth.password
+          }
         }).on('response', function(archiveRes) {
-          if (archiveRes.statusCode != 200)
+          if (archiveRes.statusCode != 302)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
-          
-          if (archiveRes.headers['content-length'] > max_repo_size)
-            return reject('Response too large.');
 
-          archiveRes.pause();
+          request({
+            uri: archiveRes.headers.location,
+            headers: {
+              'accept': 'application/octet-stream',
+              'user-agent': 'jspm'
+            }
+          })
+          .on('response', function(archiveRes) {
 
-          archiveRes.pipe(inPipe);
+            if (archiveRes.headers['content-length'] > max_repo_size)
+              return reject('Response too large.');
 
-          archiveRes.on('error', reject);
+            archiveRes.pause();
 
-          archiveRes.resume();
+            archiveRes.pipe(inPipe);
+
+            archiveRes.on('error', reject);
+
+            archiveRes.resume();
+
+          })
+          .on('error', reject);
         })
         .on('error', reject);
       });
@@ -476,7 +495,7 @@ GithubLocation.prototype = {
           else
             return false;
 
-          return { url: firstAsset.browser_download_url, type: assetType };
+          return { url: firstAsset.url, type: assetType };
         }
       }
       return false;
