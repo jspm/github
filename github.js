@@ -386,7 +386,7 @@ GithubLocation.prototype = {
             'user-agent': 'jspm'
           },
           followRedirect: false,
-          auth: {
+          auth: self.auth && {
             user: self.auth.username,
             pass: self.auth.password
           }
