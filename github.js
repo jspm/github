@@ -15,6 +15,8 @@ var DecompressZip = require('decompress-zip');
 
 var semver = require('semver');
 
+var which = require('which');
+
 function createRemoteStrings(auth) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   this.remoteString = 'https://' + authString + 'github.com/';
@@ -34,6 +36,15 @@ function decodeCredentials(str) {
 }
 
 var GithubLocation = function(options, ui) {
+
+  // ensure git is installed
+  try {
+    which.sync('git');
+  } 
+  catch(ex) {
+    throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.'
+  }
+
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 100) * 1024 * 1024;

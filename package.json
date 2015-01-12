@@ -23,7 +23,8 @@
     "rimraf": "~2.2.2",
     "rsvp": "^3.0.13",
     "semver": "^4.0.3",
-    "tar": "~0.1.18"
+    "tar": "~0.1.18",
+    "which": "^1.0.8"
   },
   "homepage": "https://github.com/jspm/github",
   "devDependencies": {}
