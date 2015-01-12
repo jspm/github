@@ -45,10 +45,7 @@ var GithubLocation = function(options, ui) {
     // delete options.password;
   }
 
-  if (!options.auth) {
-    ui.log('warn', 'GitHub credentials not provided so rate limits will apply. \nUse %jspm endpoint config ' + options.name + '% to set this up.\n');
-  }
-  else {
+  if (options.auth) {
     this.auth = decodeCredentials(options.auth);
   }
 
@@ -163,6 +160,20 @@ function configureCredentials(ui) {
     else
       return encodeCredentials(auth);
   });
+}
+
+function checkRateLimit(headers) {
+  if (headers['x-ratelimit-remaining'] != '0')
+    return;
+
+  var remaining = (headers['x-ratelimit-reset'] * 1000 - new Date(headers['date']).getTime()) / 60000;
+
+  if (this.auth)
+    return Promise.reject('\nGitHub rate limit reached, with authentication enabled.'
+        + '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
+
+  return Promise.reject('\nGitHub rate limit reached. To increase the limit use GitHub authentication.\n'
+      + 'Run %jspm endpoint config github% to set this up.');
 }
 
 
@@ -295,10 +306,15 @@ GithubLocation.prototype = {
         ref: version
       }
     }).then(function(res) {
+      var rateLimitResponse = checkRateLimit.call(this, res.headers);
+      if (rateLimitResponse)
+        return rateLimitResponse;
+
       if (res.statusCode == 404) {
         // it is quite valid for a repo not to have a package.json
         return {};
       }
+        
       if (res.statusCode != 200)
         throw 'Unable to check repo package.json for release, status code ' + res.statusCode;
       
@@ -380,7 +396,7 @@ GithubLocation.prototype = {
           .on('error', reject);
         }
         else {
-          throw 'Github release found, but no archive present.';
+          throw 'GitHub release found, but no archive present.';
         }
 
         // now that the inPipe is ready, do the request
@@ -396,6 +412,10 @@ GithubLocation.prototype = {
             pass: self.auth.password
           }
         }).on('response', function(archiveRes) {
+          var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
+          if (rateLimitResponse)
+            return rateLimitResponse.then(resolve, reject);
+
           if (archiveRes.statusCode != 302)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
@@ -436,7 +456,6 @@ GithubLocation.prototype = {
           headers: { 'accept': 'application/octet-stream' }
         })
         .on('response', function(pkgRes) {
-
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
           
@@ -474,36 +493,43 @@ GithubLocation.prototype = {
 
     return asp(request)(reqOptions)
     .then(function(res) {
-      try {
-        return JSON.parse(res.body);
-      }
-      catch(e) {
-        throw 'Unable to parse GitHub API response';
-      }
-    })
-    .then(function(releases) {
-      // run through releases list to see if we have this version tag
-      for (var i = 0; i < releases.length; i++) {
-        var tagName = releases[i].tag_name.trim();
+      var rateLimitResponse = checkRateLimit.call(this, res.headers);
+      if (rateLimitResponse)
+        return rateLimitResponse;
 
-        if (tagName == version) {
-          var firstAsset = releases[i].assets[0];
-          if (!firstAsset)
-            return false;
-
-          var assetType;
-
-          if (firstAsset.name.substr(firstAsset.name.length - 7, 7) == '.tar.gz' || firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.tgz')
-            assetType = 'tar';
-          else if (firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.zip')
-            assetType = 'zip';
-          else
-            return false;
-
-          return { url: firstAsset.url, type: assetType };
+      return Promise.resolve()
+      .then(function() {
+        try {
+          return JSON.parse(res.body);
         }
-      }
-      return false;
+        catch(e) {
+          throw 'Unable to parse GitHub API response';
+        }
+      })
+      .then(function(releases) {
+        // run through releases list to see if we have this version tag
+        for (var i = 0; i < releases.length; i++) {
+          var tagName = releases[i].tag_name.trim();
+
+          if (tagName == version) {
+            var firstAsset = releases[i].assets[0];
+            if (!firstAsset)
+              return false;
+
+            var assetType;
+
+            if (firstAsset.name.substr(firstAsset.name.length - 7, 7) == '.tar.gz' || firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.tgz')
+              assetType = 'tar';
+            else if (firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.zip')
+              assetType = 'zip';
+            else
+              return false;
+
+            return { url: firstAsset.url, type: assetType };
+          }
+        }
+        return false;
+      });
     });
   }
 
