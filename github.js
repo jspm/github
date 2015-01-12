@@ -11,6 +11,8 @@ var asp = require('rsvp').denodeify;
 var tar = require('tar');
 var zlib = require('zlib');
 
+var DecompressZip = require('decompress-zip');
+
 var semver = require('semver');
 
 function createRemoteStrings(auth) {
@@ -348,12 +350,20 @@ GithubLocation.prototype = {
 
           inPipe = fs.createWriteStream(tmpFile)
           .on('finish', function() {
-            Promise.resolve()
-            .then(function() {
-              return asp(exec)('unzip -o ' + tmpFile + ' -d ' + tmpDir + ' && chmod -R +w ' + tmpDir, execOpt)
+            new Promise(function(resolve, reject) {
+
+              var unzipper = new DecompressZip(tmpFile);
+
+              unzipper.on('error', reject);
+              unzipper.on('extract', resolve);
+
+              unzipper.extract({
+                path: tmpDir
+              });
+
             })
             .then(function() {
-              return checkStripDir(tmpDir);
+             return checkStripDir(tmpDir);
             })
             .then(function(_repoDir) {
               repoDir = _repoDir;
@@ -361,11 +371,6 @@ GithubLocation.prototype = {
             })
             .then(function() {
               return asp(fs.rename)(repoDir, outDir);
-            })
-            .then(function() {
-              return;
-              if (repoDir != tmpDir)
-                return asp(fs.rmdir)(tmpDir);
             })
             .then(function() {
               return asp(fs.unlink)(tmpFile);
