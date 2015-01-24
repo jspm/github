@@ -181,6 +181,10 @@ function configureCredentials(config, ui) {
 }
 
 function checkRateLimit(headers) {
+  if (headers.status.match(/^401/))
+    throw 'Unauthorized response for GitHub API.\n'
+    + 'Use %jspm endpoint config github% to reconfigure the credentials.';
+
   if (headers['x-ratelimit-remaining'] != '0')
     return;
 
@@ -280,8 +284,9 @@ GithubLocation.prototype = {
     return new Promise(function(resolve, reject) {
       exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
-          if ((err + '').indexOf('Repository not found') == -1)
-            reject(stderr);
+          if ((err + '').indexOf('not found') == -1)
+            // dont show plain text passwords in error
+            reject(stderr.toString().replace(remoteString, ''));
           else
             resolve({ notfound: true });
         }
