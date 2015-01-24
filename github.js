@@ -17,10 +17,16 @@ var semver = require('semver');
 
 var which = require('which');
 
-function createRemoteStrings(auth) {
+function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
-  this.remoteString = 'https://' + authString + 'github.com/';
-  this.apiRemoteString = 'https://' + authString + 'api.github.com/';
+  if (hostname !== 'github.com') {
+    // Github Enterprise
+    this.remoteString = 'https://' + authString + hostname + '/'
+    this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/'
+  } else {
+    this.remoteString = 'https://' + authString + 'github.com/';
+    this.apiRemoteString = 'https://' + authString + 'api.github.com/';
+  }
 }
 
 // avoid storing passwords as plain text in config
@@ -40,7 +46,7 @@ var GithubLocation = function(options, ui) {
   // ensure git is installed
   try {
     which.sync('git');
-  } 
+  }
   catch(ex) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.'
   }
@@ -68,8 +74,9 @@ var GithubLocation = function(options, ui) {
   };
 
   this.remote = options.remote;
+  this.hostname = options.hostname;
 
-  createRemoteStrings.call(this, this.auth);
+  createRemoteStrings.call(this, this.auth, this.hostname);
 }
 
 function clearDir(dir) {
@@ -106,18 +113,18 @@ function checkStripDir(dir) {
     .then(function(stat) {
       if (stat.isDirectory())
         return dirPath;
-      
+
       return dir;
     });
   });
 }
 
-function configureCredentials(ui) {
+function configureCredentials(config, ui) {
   var auth = {};
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://github.com/settings/applications%.');
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://'+config.hostname+'/settings/applications%.');
     return ui.input('Enter your GitHub username');
   })
   .then(function(username) {
@@ -135,7 +142,7 @@ function configureCredentials(ui) {
     return Promise.resolve()
     .then(function() {
       var remotes = {};
-      createRemoteStrings.call(remotes, auth);
+      createRemoteStrings.call(remotes, auth, config.hostname);
 
       return asp(request)({
         uri: remotes.apiRemoteString + 'user',
@@ -166,7 +173,7 @@ function configureCredentials(ui) {
       return ui.confirm('Would you like to try new credentials?', true)
       .then(function(redo) {
         if (redo)
-          return configureCredentials(ui);
+          return configureCredentials(config, ui);
       });
     else
       return encodeCredentials(auth);
@@ -192,18 +199,35 @@ function checkRateLimit(headers) {
 GithubLocation.configure = function(config, ui) {
   config.remote = config.remote || 'https://github.jspm.io';
 
-  return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
-  .then(function(auth) {
-    if (auth)
-      return configureCredentials(ui)
+  return Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', false))
+    .then(function(enterprise) {
+      config.hostname = 'github.com'
+      if (enterprise) {
+        return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', 'github.com'))
+          .then(function(hostname) {
+            if (!hostname || hostname == '') {
+              ui.log('warn', 'Invalid hostname was entered')
+              return Promise.reject()
+            }
+            config.hostname = hostname
+            return
+        })
+      }
+    })
+    .then(function() {
+      return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
       .then(function(auth) {
-        config.auth = auth;
-      });
-  })
-  .then(function() {
-    config.maxRepoSize = config.maxRepoSize || 100;
-    return config;
-  });
+        if (auth)
+          return configureCredentials(config, ui)
+          .then(function(auth) {
+            config.auth = auth;
+          });
+        })
+    })
+    .then(function() {
+      config.maxRepoSize = config.maxRepoSize || 100;
+      return config;
+    });
 }
 
 GithubLocation.prototype = {
@@ -224,7 +248,7 @@ GithubLocation.prototype = {
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request({
-        uri: 'https://github.com/' + repo,
+        uri: remoteString + repo,
         headers: {
           'User-Agent': 'jspm'
         },
@@ -234,12 +258,12 @@ GithubLocation.prototype = {
         // redirect
         if (res.statusCode == 301)
           resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
-        
+
         if (res.statusCode == 401)
           reject('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.');
 
         // it might be a private repo, so wait for the lookup to fail as well
-        if (res.statusCode == 404 || res.statusCode == 200)
+        if (res.statusCode == 404 || res.statusCode == 200 || res.statusCode === 302)
           resolve();
 
         reject(new Error('Invalid status code ' + res.statusCode + '\n' + JSON.stringify(res.headers, null, 2)));
@@ -268,7 +292,7 @@ GithubLocation.prototype = {
         for (var i = 0; i < refs.length; i++) {
           if (!refs[i])
             continue;
-          
+
           var hash = refs[i].substr(0, refs[i].indexOf('\t'));
           var refName = refs[i].substr(hash.length + 1);
           var version;
@@ -278,7 +302,7 @@ GithubLocation.prototype = {
             version = refName.substr(11);
             versionObj.stable = false;
           }
-            
+
           else if (refName.substr(0, 10) == 'refs/tags/') {
             if (refName.substr(refName.length - 3, 3) == '^{}')
               version = refName.substr(10, refName.length - 13);
@@ -306,7 +330,7 @@ GithubLocation.prototype = {
   getPackageConfig: function(repo, version, hash, meta) {
     if (meta.vPrefix)
       version = 'v' + version;
-    
+
     return asp(request)({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
@@ -325,10 +349,10 @@ GithubLocation.prototype = {
         // it is quite valid for a repo not to have a package.json
         return {};
       }
-        
+
       if (res.statusCode != 200)
         throw 'Unable to check repo package.json for release, status code ' + res.statusCode;
-      
+
       var packageJSON;
 
       try {
@@ -351,7 +375,7 @@ GithubLocation.prototype = {
     var remoteString = this.remoteString;
 
     var self = this;
-    
+
     return this.checkReleases(repo, version)
     .then(function(release) {
       if (!release)
@@ -372,7 +396,7 @@ GithubLocation.prototype = {
         else if (release.type == 'zip') {
           var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
           var tmpFile = tmpDir + '.' + release.type;
-          
+
           var repoDir;
 
           inPipe = fs.createWriteStream(tmpFile)
@@ -412,9 +436,9 @@ GithubLocation.prototype = {
 
         // now that the inPipe is ready, do the request
         request({
-          uri: release.url, 
-          headers: { 
-            'accept': 'application/octet-stream', 
+          uri: release.url,
+          headers: {
+            'accept': 'application/octet-stream',
             'user-agent': 'jspm'
           },
           followRedirect: false,
@@ -469,7 +493,7 @@ GithubLocation.prototype = {
         .on('response', function(pkgRes) {
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
-          
+
           if (pkgRes.headers['content-length'] > max_repo_size)
             return reject('Response too large.');
 
