@@ -206,8 +206,7 @@ GithubLocation.configure = function(config, ui) {
         return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', 'github.com'))
           .then(function(hostname) {
             if (!hostname || hostname == '') {
-              ui.log('warn', 'Invalid hostname was entered')
-              return Promise.reject()
+              return Promise.reject('Invalid hostname was entered.');
             }
             config.hostname = hostname
             return
