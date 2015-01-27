@@ -203,7 +203,7 @@ function checkRateLimit(headers) {
 GithubLocation.configure = function(config, ui) {
   config.remote = config.remote || 'https://github.jspm.io';
 
-  return config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', false)) : Promise.resolve()
+  return (config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', true)) : Promise.resolve())
   .then(function(enterprise) {
     config.hostname = 'github.com'
     if (enterprise) {
