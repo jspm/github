@@ -203,34 +203,34 @@ function checkRateLimit(headers) {
 GithubLocation.configure = function(config, ui) {
   config.remote = config.remote || 'https://github.jspm.io';
 
-  return Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', false))
-    .then(function(enterprise) {
-      config.hostname = 'github.com'
-      if (enterprise) {
-        return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', 'github.com'))
-          .then(function(hostname) {
-            if (!hostname || hostname == '') {
-              return Promise.reject('Invalid hostname was entered.');
-            }
-            config.hostname = hostname
-            return
-        })
-      }
-    })
-    .then(function() {
-      return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
-      .then(function(auth) {
-        if (auth)
-          return configureCredentials(config, ui)
-          .then(function(auth) {
-            config.auth = auth;
-          });
-        })
-    })
-    .then(function() {
-      config.maxRepoSize = config.maxRepoSize || 100;
-      return config;
-    });
+  return config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', false)) : Promise.resolve()
+  .then(function(enterprise) {
+    config.hostname = 'github.com'
+    if (enterprise) {
+      return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', 'github.com'))
+        .then(function(hostname) {
+          if (!hostname || hostname == '') {
+            return Promise.reject('Invalid hostname was entered.');
+          }
+          config.hostname = hostname
+          return
+      })
+    }
+  })
+  .then(function() {
+    return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
+    .then(function(auth) {
+      if (auth)
+        return configureCredentials(config, ui)
+        .then(function(auth) {
+          config.auth = auth;
+        });
+      })
+  })
+  .then(function() {
+    config.maxRepoSize = config.maxRepoSize || 100;
+    return config;
+  });
 }
 
 GithubLocation.prototype = {
