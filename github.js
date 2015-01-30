@@ -19,14 +19,16 @@ var which = require('which');
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
-  if (hostname !== 'github.com') {
-    // Github Enterprise
-    this.remoteString = 'https://' + authString + hostname + '/'
-    this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/'
-  } else {
-    this.remoteString = 'https://' + authString + 'github.com/';
+  hostname = hostname || 'github.com';
+
+  this.remoteString = 'https://' + authString + hostname + '/';
+
+  if (hostname == 'github.com')
     this.apiRemoteString = 'https://' + authString + 'api.github.com/';
-  }
+
+  // Github Enterprise
+  else
+    this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/'
 }
 
 // avoid storing passwords as plain text in config
@@ -75,9 +77,8 @@ var GithubLocation = function(options, ui) {
     this.maxBuffer = this.max_repo_size;
 
   this.remote = options.remote;
-  this.hostname = options.hostname;
 
-  createRemoteStrings.call(this, this.auth, this.hostname);
+  createRemoteStrings.call(this, this.auth, options.hostname);
 }
 
 function clearDir(dir) {
@@ -206,17 +207,15 @@ GithubLocation.configure = function(config, ui) {
 
   return (config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', true)) : Promise.resolve())
   .then(function(enterprise) {
-    config.hostname = 'github.com'
-    if (enterprise) {
-      return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', 'github.com'))
-        .then(function(hostname) {
-          if (!hostname || hostname == '') {
-            return Promise.reject('Invalid hostname was entered.');
-          }
-          config.hostname = hostname
-          return
-      })
+    if (!enterprise) {
+      config.hostname = 'github.com';
+      return;
     }
+
+    return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', config.hostname))
+    .then(function(hostname) {
+      config.hostname = hostname;
+    });
   })
   .then(function() {
     return Promise.resolve(ui.confirm('Would you like to set up your GitHub credentials?', true))
