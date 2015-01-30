@@ -53,7 +53,7 @@ var GithubLocation = function(options, ui) {
 
   this.name = options.name;
 
-  this.max_repo_size = (options.maxRepoSize || 100) * 1024 * 1024;
+  this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
 
   if (options.username && !options.auth) {
     options.auth = encodeCredentials(options);
@@ -69,9 +69,10 @@ var GithubLocation = function(options, ui) {
   this.execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
-    killSignal: 'SIGKILL',
-    maxBuffer: this.max_repo_size
+    killSignal: 'SIGKILL'
   };
+  if (this.max_repo_size)
+    this.maxBuffer = this.max_repo_size;
 
   this.remote = options.remote;
   this.hostname = options.hostname;
@@ -228,7 +229,7 @@ GithubLocation.configure = function(config, ui) {
       })
   })
   .then(function() {
-    config.maxRepoSize = config.maxRepoSize || 100;
+    config.maxRepoSize = config.maxRepoSize || 0;
     return config;
   });
 }
@@ -467,7 +468,7 @@ GithubLocation.prototype = {
           })
           .on('response', function(archiveRes) {
 
-            if (archiveRes.headers['content-length'] > max_repo_size)
+            if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
               return reject('Response too large.');
 
             archiveRes.pause();
@@ -498,7 +499,7 @@ GithubLocation.prototype = {
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
 
-          if (pkgRes.headers['content-length'] > max_repo_size)
+          if (max_repo_size && pkgRes.headers['content-length'] > max_repo_size)
             return reject('Response too large.');
 
           pkgRes.pause();
