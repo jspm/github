@@ -176,6 +176,7 @@ function configureCredentials(config, ui) {
       .then(function(redo) {
         if (redo)
           return configureCredentials(config, ui);
+        return encodeCredentials(auth);
       });
     else
       return encodeCredentials(auth);
@@ -207,10 +208,8 @@ GithubLocation.configure = function(config, ui) {
 
   return (config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', true)) : Promise.resolve())
   .then(function(enterprise) {
-    if (!enterprise) {
-      config.hostname = 'github.com';
+    if (!enterprise)
       return;
-    }
 
     return Promise.resolve(ui.input('Enter the hostname of your GitHub Enterprise server', config.hostname))
     .then(function(hostname) {
