@@ -187,6 +187,10 @@ function checkRateLimit(headers) {
   if (headers.status.match(/^401/))
     throw 'Unauthorized response for GitHub API.\n'
     + 'Use %jspm endpoint config github% to reconfigure the credentials.';
+  if (headers.status.match(/^406/))
+    throw 'Unauthorized response for GitHub API.\n'
+    + 'If using an access token ensure it has public_repo access.\n';
+    + 'Use %jspm endpoint config github% to configure the credentials.';
 
   if (headers['x-ratelimit-remaining'] != '0')
     return;
