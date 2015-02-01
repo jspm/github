@@ -285,7 +285,7 @@ GithubLocation.prototype = {
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
-      exec('git ls-remote ' + remoteString + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+      exec('git ls-remote ' + remoteString.replace(/'/g, '\\\'') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
           if ((err + '').indexOf('not found') == -1)
             // dont show plain text passwords in error
