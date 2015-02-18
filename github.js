@@ -236,16 +236,10 @@ GithubLocation.configure = function(config, ui) {
   });
 }
 
-GithubLocation.prototype = {
+// regular expression to verify package names
+GithubLocation.packageFormat = /^[^\/]+\/[^\/]+/;
 
-  parse: function(name) {
-    var parts = name.split('/');
-    var packageName = parts.splice(0, 2).join('/');
-    return {
-      package: packageName,
-      path: parts.join('/')
-    };
-  },
+GithubLocation.prototype = {
 
   // given a repo name, locate it and ensure it exists
   locate: function(repo) {
