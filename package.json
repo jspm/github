@@ -1,6 +1,6 @@
 {
   "name": "jspm-github",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "jspm GitHub endpoint",
   "main": "github.js",
   "scripts": {
@@ -19,11 +19,11 @@
     "decompress-zip": "^0.1.0",
     "graceful-fs": "^3.0.5",
     "mkdirp": "~0.5.0",
-    "request": "~2.51.0",
+    "request": "~2.53.0",
     "rimraf": "~2.2.2",
-    "rsvp": "^3.0.13",
-    "semver": "^4.0.3",
-    "tar": "~0.1.18",
+    "rsvp": "^3.0.16",
+    "semver": "^4.3.0",
+    "tar": "~1.0.3",
     "which": "^1.0.8"
   },
   "homepage": "https://github.com/jspm/github",
