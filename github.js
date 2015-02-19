@@ -580,6 +580,9 @@ GithubLocation.prototype = {
       if (!main)
         return Promise.resolve(false);
 
+      if (main.substr(main.length - 3, 3) == '.js')
+        main = main.substr(0, main.length - 3);
+
       return new Promise(function(resolve, reject) {
         fs.exists(path.resolve(dir, main), function(exists) {
           resolve(exists);
