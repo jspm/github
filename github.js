@@ -567,6 +567,53 @@ GithubLocation.prototype = {
         return false;
       });
     });
+  },
+
+  // check if the main entry point exists. If not, try the bower.json main.
+  build: function(pjson, dir) {
+    var main = pjson.main || '';
+
+    if (main.indexOf('!') != -1)
+      return;
+
+    function checkMain(main) {
+      if (!main)
+        return Promise.resolve(false);
+
+      return new Promise(function(resolve, reject) {
+        fs.exists(path.resolve(dir, main), function(exists) {
+          resolve(exists);
+        });
+      });
+    }    
+
+    return checkMain(main, dir)
+    .then(function(hasMain) {
+      if (hasMain)
+        return;
+
+      return asp(fs.readFile)(path.resolve(dir, 'bower.json'))
+      .then(function(bowerJson) {
+        try {
+          bowerJson = JSON.parse(bowerJson);
+        }
+        catch(e) {
+          return;
+        }
+
+        main = bowerJson.main || '';
+        if (main instanceof Array)
+          main = main[0];
+
+        return checkMain(main, dir);
+      })
+      .then(function(hasBowerMain) {
+        if (!hasBowerMain)
+          return;
+
+        pjson.main = main;
+      });
+    });
   }
 
 };
