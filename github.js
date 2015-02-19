@@ -606,7 +606,7 @@ GithubLocation.prototype = {
           main = main[0];
 
         return checkMain(main, dir);
-      })
+      }, function() {})
       .then(function(hasBowerMain) {
         if (!hasBowerMain)
           return;
