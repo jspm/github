@@ -584,7 +584,7 @@ GithubLocation.prototype = {
         main = main.substr(0, main.length - 3);
 
       return new Promise(function(resolve, reject) {
-        fs.exists(path.resolve(dir, main), function(exists) {
+        fs.exists(path.resolve(dir, main) + '.js', function(exists) {
           resolve(exists);
         });
       });
