@@ -572,8 +572,11 @@ GithubLocation.prototype = {
   // check if the main entry point exists. If not, try the bower.json main.
   build: function(pjson, dir) {
     var main = pjson.main || '';
-
     var libDir = pjson.directories && (pjson.directories.dist || pjson.directories.lib) || '.';
+
+    // convert to windows-style paths if necessary
+    main = main.replace(/\//g, path.sep);
+    libDir = libDir.replace(/\//g, path.sep);
 
     if (main.indexOf('!') != -1)
       return;
