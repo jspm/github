@@ -573,10 +573,12 @@ GithubLocation.prototype = {
   build: function(pjson, dir) {
     var main = pjson.main || '';
 
+    var libDir = pjson.directories && (pjson.directories.dist || pjson.directories.lib) || '.';
+
     if (main.indexOf('!') != -1)
       return;
 
-    function checkMain(main) {
+    function checkMain(main, libDir) {
       if (!main)
         return Promise.resolve(false);
 
@@ -584,13 +586,13 @@ GithubLocation.prototype = {
         main = main.substr(0, main.length - 3);
 
       return new Promise(function(resolve, reject) {
-        fs.exists(path.resolve(dir, main) + '.js', function(exists) {
+        fs.exists(path.resolve(dir, libDir || '.', main) + '.js', function(exists) {
           resolve(exists);
         });
       });
     }    
 
-    return checkMain(main, dir)
+    return checkMain(main, libDir)
     .then(function(hasMain) {
       if (hasMain)
         return;
@@ -608,7 +610,7 @@ GithubLocation.prototype = {
         if (main instanceof Array)
           main = main[0];
 
-        return checkMain(main, dir);
+        return checkMain(main);
       }, function() {})
       .then(function(hasBowerMain) {
         if (!hasBowerMain)
