@@ -367,6 +367,12 @@ GithubLocation.prototype = {
     });
   },
 
+  processPackageConfig: function(pjson) {
+    if (!pjson.registry)
+      delete pjson.dependencies;
+    return pjson;
+  },
+
   download: function(repo, version, hash, meta, outDir) {
     if (meta.vPrefix)
       version = 'v' + version;
