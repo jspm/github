@@ -186,11 +186,11 @@ function configureCredentials(config, ui) {
 function checkRateLimit(headers) {
   if (headers.status.match(/^401/))
     throw 'Unauthorized response for GitHub API.\n'
-    + 'Use %jspm endpoint config github% to reconfigure the credentials.';
+    + 'Use %jspm registry config github% to reconfigure the credentials.';
   if (headers.status.match(/^406/))
     throw 'Unauthorized response for GitHub API.\n'
     + 'If using an access token ensure it has public_repo access.\n';
-    + 'Use %jspm endpoint config github% to configure the credentials.';
+    + 'Use %jspm registry config github% to configure the credentials.';
 
   if (headers['x-ratelimit-remaining'] != '0')
     return;
@@ -202,7 +202,7 @@ function checkRateLimit(headers) {
         + '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
 
   return Promise.reject('\nGitHub rate limit reached. To increase the limit use GitHub authentication.\n'
-      + 'Run %jspm endpoint config github% to set this up.');
+      + 'Run %jspm registry config github% to set this up.');
 }
 
 
@@ -210,7 +210,7 @@ function checkRateLimit(headers) {
 GithubLocation.configure = function(config, ui) {
   config.remote = config.remote || 'https://github.jspm.io';
 
-  return (config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise endpoint?', true)) : Promise.resolve())
+  return (config.name != 'github' ? Promise.resolve(ui.confirm('Are you setting up a GitHub Enterprise registry?', true)) : Promise.resolve())
   .then(function(enterprise) {
     if (!enterprise)
       return;
@@ -260,7 +260,7 @@ GithubLocation.prototype = {
           resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
 
         if (res.statusCode == 401)
-          reject('Invalid authentication details. Run %jspm endpoint config ' + self.name + '% to reconfigure.');
+          reject('Invalid authentication details. Run %jspm registry config ' + self.name + '% to reconfigure.');
 
         // it might be a private repo, so wait for the lookup to fail as well
         if (res.statusCode == 404 || res.statusCode == 200 || res.statusCode === 302)
