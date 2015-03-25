@@ -368,7 +368,7 @@ GithubLocation.prototype = {
   },
 
   processPackageConfig: function(pjson) {
-    if (!pjson.registry)
+    if (!pjson.registry && !pjson.jspm.dependencies)
       delete pjson.dependencies;
     return pjson;
   },
