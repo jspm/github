@@ -551,7 +551,7 @@ GithubLocation.prototype = {
       .then(function(releases) {
         // run through releases list to see if we have this version tag
         for (var i = 0; i < releases.length; i++) {
-          var tagName = releases[i].tag_name.trim();
+          var tagName = (releases[i].tag_name || '').trim();
 
           if (tagName == version) {
             var firstAsset = releases[i].assets[0];
