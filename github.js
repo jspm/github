@@ -580,6 +580,12 @@ GithubLocation.prototype = {
     var main = pjson.main || '';
     var libDir = pjson.directories && (pjson.directories.dist || pjson.directories.lib) || '.';
 
+    if (main instanceof Array)
+      main = main[0];
+
+    if (typeof main != 'string')
+      return;
+
     // convert to windows-style paths if necessary
     main = main.replace(/\//g, path.sep);
     libDir = libDir.replace(/\//g, path.sep);
