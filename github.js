@@ -57,6 +57,8 @@ var GithubLocation = function(options, ui) {
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
 
+  this.versionString = options.versionString + '.1';
+
   if (options.username && !options.auth) {
     options.auth = encodeCredentials(options);
     // NB deprecate old auth eventually
@@ -370,6 +372,28 @@ GithubLocation.prototype = {
   processPackageConfig: function(pjson) {
     if (!pjson.registry && !pjson.jspm.dependencies)
       delete pjson.dependencies;
+
+    // on GitHub, single package names ('jquery') are from jspm registry
+    // double package names ('components/jquery') are from github registry
+    for (var d in pjson.dependencies) {
+      var depName = pjson.dependencies[d];
+      var depVersion;
+      
+      if (depName.indexOf(':') != -1)
+        continue;
+      
+      if (depName.indexOf('@') != -1) {
+        depName = depName.substr(0, depName.indexOf('@'));
+        depVersion = depName.substr(depName.indexOf('@') + 1);
+      }
+      else {
+        depVersion = depName;
+        depName = d;
+      }
+
+      if (depName.split('/').length == 1)
+        pjson.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
+    }
     return pjson;
   },
 
