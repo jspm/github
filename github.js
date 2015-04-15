@@ -44,8 +44,9 @@ function decodeCredentials(str) {
     password: decodeURIComponent(auth[1])
   };
 }
-function readNetrc() {
-  var creds = netrc('github.com');
+function readNetrc(hostname) {
+  hostname = hostname || 'github.com';
+  var creds = netrc(hostname);
 
   if (creds) {
     return {
@@ -82,7 +83,7 @@ var GithubLocation = function(options, ui) {
     this.auth = decodeCredentials(options.auth);
   }
   else {
-    this.auth = readNetrc();
+    this.auth = readNetrc(options.hostname);
   }
 
   this.execOpt = {
