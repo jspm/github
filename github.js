@@ -17,6 +17,8 @@ var semver = require('semver');
 
 var which = require('which');
 
+var netrc = require('node-netrc');
+
 function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   hostname = hostname || 'github.com';
@@ -41,6 +43,16 @@ function decodeCredentials(str) {
     username: decodeURIComponent(auth[0]),
     password: decodeURIComponent(auth[1])
   };
+}
+function readNetrc() {
+  var creds = netrc('github.com');
+
+  if (creds) {
+    return {
+      username: creds.login,
+      password: creds.password
+    };
+  }
 }
 
 var GithubLocation = function(options, ui) {
@@ -68,6 +80,9 @@ var GithubLocation = function(options, ui) {
 
   if (options.auth) {
     this.auth = decodeCredentials(options.auth);
+  }
+  else {
+    this.auth = readNetrc();
   }
 
   this.execOpt = {
