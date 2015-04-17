@@ -247,6 +247,10 @@ GithubLocation.prototype = {
   locate: function(repo) {
     var self = this;
     var remoteString = this.remoteString;
+
+    if (repo.split('/').length !== 2)
+      throw "GitHub packages must be of the form `owner/repo`.";
+
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request({
