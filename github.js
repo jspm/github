@@ -374,7 +374,10 @@ GithubLocation.prototype = {
   },
 
   processPackageConfig: function(pjson) {
-    if (!pjson.registry && !pjson.jspm.dependencies)
+    if (!pjson.jspm || !pjson.jspm.files)
+      delete pjson.files;
+
+    if (!pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies))
       delete pjson.dependencies;
 
     // on GitHub, single package names ('jquery') are from jspm registry
