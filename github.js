@@ -327,7 +327,7 @@ GithubLocation.prototype = {
           versions[version] = versionObj;
         }
 
-        resolve({ versions: versions });
+        resolve({ versions: versions, latest: 'master', edge: 'dev' });
       });
     });
   },
