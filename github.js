@@ -30,7 +30,7 @@ function createRemoteStrings(auth, hostname) {
 
   // Github Enterprise
   else
-    this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/'
+    this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/';
 }
 
 // avoid storing passwords as plain text in config
@@ -63,7 +63,7 @@ var GithubLocation = function(options, ui) {
     which.sync('git');
   }
   catch(ex) {
-    throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.'
+    throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
   this.name = options.name;
@@ -246,13 +246,13 @@ GithubLocation.configure = function(config, ui) {
         .then(function(auth) {
           config.auth = auth;
         });
-      })
+      });
   })
   .then(function() {
     config.maxRepoSize = config.maxRepoSize || 0;
     return config;
   });
-}
+};
 
 // regular expression to verify package names
 GithubLocation.packageFormat = /^[^\/]+\/[^\/]+/;
@@ -263,6 +263,10 @@ GithubLocation.prototype = {
   locate: function(repo) {
     var self = this;
     var remoteString = this.remoteString;
+
+    if (repo.split('/').length !== 2)
+      throw "GitHub packages must be of the form `owner/repo`.";
+
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request({
@@ -386,7 +390,10 @@ GithubLocation.prototype = {
   },
 
   processPackageConfig: function(pjson) {
-    if (!pjson.registry && !pjson.jspm.dependencies)
+    if (!pjson.jspm || !pjson.jspm.files)
+      delete pjson.files;
+
+    if (!pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies))
       delete pjson.dependencies;
 
     // on GitHub, single package names ('jquery') are from jspm registry
@@ -394,10 +401,10 @@ GithubLocation.prototype = {
     for (var d in pjson.dependencies) {
       var depName = pjson.dependencies[d];
       var depVersion;
-      
+
       if (depName.indexOf(':') != -1)
         continue;
-      
+
       if (depName.indexOf('@') != -1) {
         depName = depName.substr(0, depName.indexOf('@'));
         depVersion = depName.substr(depName.indexOf('@') + 1);
@@ -645,7 +652,7 @@ GithubLocation.prototype = {
           resolve(exists);
         });
       });
-    }    
+    }
 
     return checkMain(main, libDir)
     .then(function(hasMain) {
