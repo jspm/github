@@ -17,6 +17,8 @@ var semver = require('semver');
 
 var which = require('which');
 
+var netrc = require('netrc')();
+
 function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   hostname = hostname || 'github.com';
@@ -41,6 +43,18 @@ function decodeCredentials(str) {
     username: decodeURIComponent(auth[0]),
     password: decodeURIComponent(auth[1])
   };
+}
+
+function readNetrc(hostname) {
+  hostname = hostname || 'github.com';
+  var creds = netrc[hostname];
+
+  if (creds) {
+    return {
+      username: creds.login,
+      password: creds.password
+    };
+  }
 }
 
 var GithubLocation = function(options, ui) {
@@ -68,6 +82,9 @@ var GithubLocation = function(options, ui) {
 
   if (options.auth) {
     this.auth = decodeCredentials(options.auth);
+  }
+  else {
+    this.auth = readNetrc(options.hostname);
   }
 
   this.execOpt = {
@@ -188,11 +205,11 @@ function configureCredentials(config, ui) {
 function checkRateLimit(headers) {
   if (headers.status.match(/^401/))
     throw 'Unauthorized response for GitHub API.\n'
-    + 'Use %jspm registry config github% to reconfigure the credentials.';
+    + 'Use %jspm registry config github% to reconfigure the credentials, or update them in your ~/.netrc file.';
   if (headers.status.match(/^406/))
     throw 'Unauthorized response for GitHub API.\n'
     + 'If using an access token ensure it has public_repo access.\n';
-    + 'Use %jspm registry config github% to configure the credentials.';
+    + 'Use %jspm registry config github% to configure the credentials, or add them to your ~/.netrc file.';
 
   if (headers['x-ratelimit-remaining'] != '0')
     return;
@@ -204,7 +221,7 @@ function checkRateLimit(headers) {
         + '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
 
   return Promise.reject('\nGitHub rate limit reached. To increase the limit use GitHub authentication.\n'
-      + 'Run %jspm registry config github% to set this up.');
+      + 'Run %jspm registry config github% to set this up, or add the credentials to your ~/.netrc file.');
 }
 
 
@@ -266,7 +283,8 @@ GithubLocation.prototype = {
           resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
 
         if (res.statusCode == 401)
-          reject('Invalid authentication details. Run %jspm registry config ' + self.name + '% to reconfigure.');
+          reject('Invalid authentication details.\n' + 
+            'Run %jspm registry config ' + self.name + '% to reconfigure the credentials, or update them in your ~/.netrc file.');
 
         // it might be a private repo, so wait for the lookup to fail as well
         if (res.statusCode == 404 || res.statusCode == 200 || res.statusCode === 302)
