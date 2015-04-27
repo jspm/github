@@ -145,7 +145,7 @@ function configureCredentials(config, ui) {
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/applications%.');
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
     return ui.input('Enter your GitHub username');
   })
   .then(function(username) {
