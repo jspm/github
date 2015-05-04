@@ -90,10 +90,9 @@ var GithubLocation = function(options, ui) {
   this.execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
-    killSignal: 'SIGKILL'
+    killSignal: 'SIGKILL',
+    maxBuffer: 2 * 1024 * 1024
   };
-  if (this.max_repo_size)
-    this.maxBuffer = this.max_repo_size;
 
   this.remote = options.remote;
 
@@ -305,7 +304,7 @@ GithubLocation.prototype = {
     return new Promise(function(resolve, reject) {
       exec('git ls-remote ' + remoteString.replace(/'/g, '\\\'') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
-          if ((err + '').indexOf('not found') == -1)
+          if (err.toString().indexOf('not found') == -1)
             // dont show plain text passwords in error
             reject(stderr.toString().replace(remoteString, ''));
           else
