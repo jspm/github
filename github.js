@@ -67,6 +67,7 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
+  this.strictSSL = options.strictSSL;
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -91,7 +92,8 @@ var GithubLocation = function(options, ui) {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
-    maxBuffer: 2 * 1024 * 1024
+    maxBuffer: 2 * 1024 * 1024,
+    "strict-ssl": this.strictSSL
   };
 
   this.remote = options.remote;
@@ -170,7 +172,8 @@ function configureCredentials(config, ui) {
           'User-Agent': 'jspm',
           'Accept': 'application/vnd.github.v3+json'
         },
-        followRedirect: false
+        followRedirect: false,
+        strictSSL: this.strictSSL
       });
     })
     .then(function(res) {
@@ -274,7 +277,8 @@ GithubLocation.prototype = {
         headers: {
           'User-Agent': 'jspm'
         },
-        followRedirect: false
+        followRedirect: false,
+        strictSSL: this.strictSSL
       })
       .on('response', function(res) {
         // redirect
@@ -282,7 +286,7 @@ GithubLocation.prototype = {
           resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
 
         if (res.statusCode == 401)
-          reject('Invalid authentication details.\n' + 
+          reject('Invalid authentication details.\n' +
             'Run %jspm registry config ' + self.name + '% to reconfigure the credentials, or update them in your ~/.netrc file.');
 
         // it might be a private repo, so wait for the lookup to fail as well
@@ -299,6 +303,8 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
+
+
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
@@ -363,7 +369,8 @@ GithubLocation.prototype = {
       },
       qs: {
         ref: version
-      }
+      },
+      strictSSL: this.strictSSL
     }).then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
@@ -500,7 +507,8 @@ GithubLocation.prototype = {
           auth: self.auth && {
             user: self.auth.username,
             pass: self.auth.password
-          }
+          },
+          strictSSL: self.strictSSL
         }).on('response', function(archiveRes) {
           var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
           if (rateLimitResponse)
@@ -514,7 +522,8 @@ GithubLocation.prototype = {
             headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
-            }
+            },
+            strictSSL: self.strictSSL
           })
           .on('response', function(archiveRes) {
 
@@ -543,7 +552,8 @@ GithubLocation.prototype = {
       return new Promise(function(resolve, reject) {
         request({
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' }
+          headers: { 'accept': 'application/octet-stream' },
+          strictSSL: self.strictSSL
         })
         .on('response', function(pkgRes) {
           if (pkgRes.statusCode != 200)
@@ -578,7 +588,8 @@ GithubLocation.prototype = {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
       },
-      followRedirect: false
+      followRedirect: false,
+      strictSSL: this.strictSSL
     };
 
     return asp(request)(reqOptions)
@@ -586,7 +597,6 @@ GithubLocation.prototype = {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
         return rateLimitResponse;
-
       return Promise.resolve()
       .then(function() {
         try {
