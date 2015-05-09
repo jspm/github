@@ -278,7 +278,7 @@ GithubLocation.prototype = {
           'User-Agent': 'jspm'
         },
         followRedirect: false,
-        strictSSL: this.strictSSL
+        strictSSL: self.strictSSL
       })
       .on('response', function(res) {
         // redirect
