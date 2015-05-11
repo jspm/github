@@ -92,8 +92,7 @@ var GithubLocation = function(options, ui) {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
-    maxBuffer: 2 * 1024 * 1024,
-    "strict-ssl": this.strictSSL
+    maxBuffer: 2 * 1024 * 1024
   };
 
   this.remote = options.remote;
@@ -173,7 +172,7 @@ function configureCredentials(config, ui) {
           'Accept': 'application/vnd.github.v3+json'
         },
         followRedirect: false,
-        strictSSL: this.strictSSL
+        strictSSL: 'strictSSL' in config ? config.strictSSL : true
       });
     })
     .then(function(res) {
