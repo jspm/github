@@ -294,7 +294,14 @@ GithubLocation.prototype = {
 
         reject(new Error('Invalid status code ' + res.statusCode + '\n' + JSON.stringify(res.headers, null, 2)));
       })
-      .on('error', reject);
+      .on('error', function(error) {
+        if (typeof error == 'string') {
+          error = new Error(error);
+          error.hideStack = true;
+        }
+        error.retriable = true;
+        reject(error);
+      });
     });
   },
 
@@ -309,9 +316,13 @@ GithubLocation.prototype = {
     return new Promise(function(resolve, reject) {
       exec('git ls-remote ' + remoteString.replace(/'/g, '\\\'') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
-          if (err.toString().indexOf('not found') == -1)
+          if (err.toString().indexOf('not found') == -1) {
             // dont show plain text passwords in error
-            reject(stderr.toString().replace(remoteString, ''));
+            var error = new Error(stderr.toString().replace(remoteString, ''));
+            error.hideStack = true;
+            error.retriable = true;
+            reject(error);
+          }
           else
             resolve({ notfound: true });
         }
