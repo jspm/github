@@ -67,7 +67,7 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
-  this.strictSSL = options.strictSSL;
+  this.strictSSL = 'strictSSL' in options ? options.strictSSL : true
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
