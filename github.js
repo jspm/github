@@ -67,6 +67,7 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
+  this.strictSSL = 'strictSSL' in options ? options.strictSSL : true
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -170,7 +171,8 @@ function configureCredentials(config, ui) {
           'User-Agent': 'jspm',
           'Accept': 'application/vnd.github.v3+json'
         },
-        followRedirect: false
+        followRedirect: false,
+        strictSSL: 'strictSSL' in config ? config.strictSSL : true
       });
     })
     .then(function(res) {
@@ -274,7 +276,8 @@ GithubLocation.prototype = {
         headers: {
           'User-Agent': 'jspm'
         },
-        followRedirect: false
+        followRedirect: false,
+        strictSSL: self.strictSSL
       })
       .on('response', function(res) {
         // redirect
@@ -306,6 +309,8 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
+
+
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
@@ -374,7 +379,8 @@ GithubLocation.prototype = {
       },
       qs: {
         ref: version
-      }
+      },
+      strictSSL: this.strictSSL
     }).then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
@@ -511,7 +517,8 @@ GithubLocation.prototype = {
           auth: self.auth && {
             user: self.auth.username,
             pass: self.auth.password
-          }
+          },
+          strictSSL: self.strictSSL
         }).on('response', function(archiveRes) {
           var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
           if (rateLimitResponse)
@@ -525,7 +532,8 @@ GithubLocation.prototype = {
             headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
-            }
+            },
+            strictSSL: self.strictSSL
           })
           .on('response', function(archiveRes) {
 
@@ -554,7 +562,8 @@ GithubLocation.prototype = {
       return new Promise(function(resolve, reject) {
         request({
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' }
+          headers: { 'accept': 'application/octet-stream' },
+          strictSSL: self.strictSSL
         })
         .on('response', function(pkgRes) {
           if (pkgRes.statusCode != 200)
@@ -589,7 +598,8 @@ GithubLocation.prototype = {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
       },
-      followRedirect: false
+      followRedirect: false,
+      strictSSL: this.strictSSL
     };
 
     return asp(request)(reqOptions)
@@ -597,7 +607,6 @@ GithubLocation.prototype = {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
         return rateLimitResponse;
-
       return Promise.resolve()
       .then(function() {
         try {
