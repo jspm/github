@@ -67,7 +67,7 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
-  this.strictSSL = 'strictSSL' in options ? options.strictSSL : true
+  this.strictSSL = 'strictSSL' in options ? options.strictSSL : true;
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -98,7 +98,7 @@ var GithubLocation = function(options, ui) {
   this.remote = options.remote;
 
   createRemoteStrings.call(this, this.auth, options.hostname);
-}
+};
 
 function clearDir(dir) {
   return new Promise(function(resolve, reject) {
@@ -209,7 +209,7 @@ function checkRateLimit(headers) {
     + 'Use %jspm registry config github% to reconfigure the credentials, or update them in your ~/.netrc file.';
   if (headers.status.match(/^406/))
     throw 'Unauthorized response for GitHub API.\n'
-    + 'If using an access token ensure it has public_repo access.\n';
+    + 'If using an access token ensure it has public_repo access.\n'
     + 'Use %jspm registry config github% to configure the credentials, or add them to your ~/.netrc file.';
 
   if (headers['x-ratelimit-remaining'] != '0')
