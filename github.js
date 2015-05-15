@@ -221,8 +221,10 @@ function checkRateLimit(headers) {
     return Promise.reject('\nGitHub rate limit reached, with authentication enabled.'
         + '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
 
-  return Promise.reject('\nGitHub rate limit reached. To increase the limit use GitHub authentication.\n'
-      + 'Run %jspm registry config github% to set this up, or add the credentials to your ~/.netrc file.');
+  var err = new Error('GitHub rate limit reached.');
+  err.config = true;
+
+  return Promise.reject(err);
 }
 
 
