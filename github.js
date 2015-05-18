@@ -205,24 +205,26 @@ function configureCredentials(config, ui) {
 
 function checkRateLimit(headers) {
   if (headers.status.match(/^401/))
-    throw 'Unauthorized response for GitHub API.\n'
-    + 'Use %jspm registry config github% to reconfigure the credentials, or update them in your ~/.netrc file.';
+    throw 'Unauthorized response for GitHub API.\n' +
+      'Use %jspm registry config github% to reconfigure the credentials, or update them in your ~/.netrc file.';
   if (headers.status.match(/^406/))
-    throw 'Unauthorized response for GitHub API.\n'
-    + 'If using an access token ensure it has public_repo access.\n'
-    + 'Use %jspm registry config github% to configure the credentials, or add them to your ~/.netrc file.';
+    throw 'Unauthorized response for GitHub API.\n' +
+      'If using an access token ensure it has public_repo access.\n' +
+      'Use %jspm registry config github% to configure the credentials, or add them to your ~/.netrc file.';
 
   if (headers['x-ratelimit-remaining'] != '0')
     return;
 
-  var remaining = (headers['x-ratelimit-reset'] * 1000 - new Date(headers['date']).getTime()) / 60000;
+  var remaining = (headers['x-ratelimit-reset'] * 1000 - new Date(headers.date).getTime()) / 60000;
 
   if (this.auth)
-    return Promise.reject('\nGitHub rate limit reached, with authentication enabled.'
-        + '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
+    return Promise.reject('\nGitHub rate limit reached, with authentication enabled.' +
+        '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
 
-  return Promise.reject('\nGitHub rate limit reached. To increase the limit use GitHub authentication.\n'
-      + 'Run %jspm registry config github% to set this up, or add the credentials to your ~/.netrc file.');
+  var err = new Error('GitHub rate limit reached.');
+  err.config = true;
+
+  return Promise.reject(err);
 }
 
 
