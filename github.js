@@ -223,6 +223,7 @@ function checkRateLimit(headers) {
 
   var err = new Error('GitHub rate limit reached.');
   err.config = true;
+  err.hideStack = true;
 
   return Promise.reject(err);
 }
