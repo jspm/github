@@ -1,23 +1,18 @@
+var asp = require('rsvp').denodeify;
+var Promise = require('rsvp').Promise;
+var DecompressZip = require('decompress-zip');
 var exec = require('child_process').exec;
 var fs = require('graceful-fs');
-var path = require('path');
 var mkdirp = require('mkdirp');
+var netrc = require('netrc')();
+var path = require('path');
 var rimraf = require('rimraf');
-var request = require('request');
-
-var Promise = require('rsvp').Promise;
-var asp = require('rsvp').denodeify;
-
+var semver = require('semver');
 var tar = require('tar');
+var which = require('which');
 var zlib = require('zlib');
 
-var DecompressZip = require('decompress-zip');
-
-var semver = require('semver');
-
-var which = require('which');
-
-var netrc = require('netrc')();
+var api = require('./api');
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
@@ -164,16 +159,8 @@ function configureCredentials(config, ui) {
     .then(function() {
       var remotes = {};
       createRemoteStrings.call(remotes, auth, config.hostname);
-
-      return asp(request)({
-        uri: remotes.apiRemoteString + 'user',
-        headers: {
-          'User-Agent': 'jspm',
-          'Accept': 'application/vnd.github.v3+json'
-        },
-        followRedirect: false,
-        strictSSL: 'strictSSL' in config ? config.strictSSL : true
-      });
+      var strictSSL = 'strictSSL' in config ? config.strictSSL : true;
+      return api.testCredentials(remotes.apiRemoteString, strictSSL);
     })
     .then(function(res) {
       if (res.statusCode == 401) {
@@ -274,15 +261,8 @@ GithubLocation.prototype = {
 
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
-      request({
-        uri: remoteString + repo,
-        headers: {
-          'User-Agent': 'jspm'
-        },
-        followRedirect: false,
-        strictSSL: self.strictSSL
-      })
-      .on('response', function(res) {
+      api.locateRepo(remoteString, repo, self.strictSSL)
+      .then(function(res) {
         // redirect
         if (res.statusCode == 301)
           resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
@@ -297,7 +277,7 @@ GithubLocation.prototype = {
 
         reject(new Error('Invalid status code ' + res.statusCode + '\n' + JSON.stringify(res.headers, null, 2)));
       })
-      .on('error', function(error) {
+      .catch(function(error) {
         if (typeof error == 'string') {
           error = new Error(error);
           error.hideStack = true;
@@ -312,8 +292,6 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
-
-
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
@@ -374,17 +352,8 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)({
-      uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
-      headers: {
-        'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.v3.raw'
-      },
-      qs: {
-        ref: version
-      },
-      strictSSL: this.strictSSL
-    }).then(function(res) {
+    return api.getPackageConfig(this.apiRemoteString, repo, this.strictSSL)
+    .then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
         return rateLimitResponse;
@@ -510,51 +479,16 @@ GithubLocation.prototype = {
         }
 
         // now that the inPipe is ready, do the request
-        request({
-          uri: release.url,
-          headers: {
-            'accept': 'application/octet-stream',
-            'user-agent': 'jspm'
-          },
-          followRedirect: false,
-          auth: self.auth && {
-            user: self.auth.username,
-            pass: self.auth.password
-          },
-          strictSSL: self.strictSSL
-        }).on('response', function(archiveRes) {
-          var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
-          if (rateLimitResponse)
-            return rateLimitResponse.then(resolve, reject);
+        api.download(release.url, config, self.auth)
+        .then(function(archiveRes) {
+          if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
+            return reject('Response too large.');
 
-          if (archiveRes.statusCode != 302)
-            return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
-
-          request({
-            uri: archiveRes.headers.location,
-            headers: {
-              'accept': 'application/octet-stream',
-              'user-agent': 'jspm'
-            },
-            strictSSL: self.strictSSL
-          })
-          .on('response', function(archiveRes) {
-
-            if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
-              return reject('Response too large.');
-
-            archiveRes.pause();
-
-            archiveRes.pipe(inPipe);
-
-            archiveRes.on('error', reject);
-
-            archiveRes.resume();
-
-          })
-          .on('error', reject);
-        })
-        .on('error', reject);
+          archiveRes.pause();
+          archiveRes.pipe(inPipe);
+          archiveRes.on('error', reject);
+          archiveRes.resume();
+        });
       });
     })
     .then(function(git) {
@@ -562,50 +496,24 @@ GithubLocation.prototype = {
         return;
 
       // Download from the git archive
-      return new Promise(function(resolve, reject) {
-        request({
-          uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' },
-          strictSSL: self.strictSSL
-        })
-        .on('response', function(pkgRes) {
-          if (pkgRes.statusCode != 200)
-            return reject('Bad response code ' + pkgRes.statusCode);
+      return api.downloadArchive(remoteString, repo, version, max_repo_size, this.strictSSL)
+      .then(function(pkgRes) {
+        pkgRes.pause();
+        var gzip = zlib.createGunzip();
 
-          if (max_repo_size && pkgRes.headers['content-length'] > max_repo_size)
-            return reject('Response too large.');
+        pkgRes
+        .pipe(gzip)
+        .pipe(tar.Extract({ path: outDir, strip: 1 }))
+        .on('error', reject)
+        .on('end', resolve);
 
-          pkgRes.pause();
-
-          var gzip = zlib.createGunzip();
-
-          pkgRes
-          .pipe(gzip)
-          .pipe(tar.Extract({ path: outDir, strip: 1 }))
-          .on('error', reject)
-          .on('end', resolve);
-
-          pkgRes.resume();
-
-        })
-        .on('error', reject);
+        pkgRes.resume();
       });
     });
   },
 
   checkReleases: function(repo, version) {
-    // NB cache this on disk with etags
-    var reqOptions = {
-      uri: this.apiRemoteString + 'repos/' + repo + '/releases',
-      headers: {
-        'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.v3+json'
-      },
-      followRedirect: false,
-      strictSSL: this.strictSSL
-    };
-
-    return asp(request)(reqOptions)
+    return api.checkReleases(this.apiRemoteString, repo, this.strictSSL)
     .then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
@@ -706,7 +614,6 @@ GithubLocation.prototype = {
       });
     });
   }
-
 };
 
 module.exports = GithubLocation;
