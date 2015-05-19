@@ -2,6 +2,15 @@ var asp = require('rsvp').denodeify;
 var Promise = require('rsvp').Promise;
 var request = require('request');
 
+
+var crypto = require('crypto');
+
+function md5(input) {
+  var md5Hash = crypto.createHash('md5');
+  md5Hash.update(input);
+  return md5Hash.digest('hex');
+}
+
 exports.testCredentials = function(base, strictSSL) {
   return asp(request)({
     uri: remotes.apiRemoteString + 'user',
@@ -10,35 +19,6 @@ exports.testCredentials = function(base, strictSSL) {
       'Accept': 'application/vnd.github.v3+json'
     },
     followRedirect: false,
-    strictSSL: strictSSL
-  });
-};
-
-exports.locateRepo = function(base, repo, strictSSL) {
-  return new Promise(function(resolve, reject) {
-    request({
-      uri: base + repo,
-      headers: {
-        'User-Agent': 'jspm'
-      },
-      followRedirect: false,
-      strictSSL: strictSSL
-    })
-    .on('response', resolve)
-    .on('error', reject);
-  });
-};
-
-exports.getPackageConfig = function(base, repo, strictSSL) {
-  return asp(request)({
-    uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
-    headers: {
-      'User-Agent': 'jspm',
-      'Accept': 'application/vnd.github.v3.raw'
-    },
-    qs: {
-      ref: version
-    },
     strictSSL: strictSSL
   });
 };
@@ -97,6 +77,61 @@ exports.downloadArchive = function(base, repo, version, max_repo_size, strictSSL
       resolve(pkgRes);
     })
     .on('error', reject);
+  });
+};
+
+// Cachable
+
+var memoryCache = {};
+
+function cached(key, requestFunction) {
+  return function () {
+    var cacheKey = md5(key + ":" + JSON.stringify(argument));
+    var cache = memoryCache[cacheKey];
+    // TODO: pass the etag to the request
+    return requestFunction.call(null, arguments)
+    .then(function(response) {
+      var etag = response.headers.etag;
+      if (response.statusCode == 304) {
+        return cache.response;
+      }
+      else {
+        memoryCache[cacheKey] = {
+          etag: etag,
+          response: response
+        };
+        return response;
+      }
+    });
+  };
+}
+
+exports.locateRepo = function(base, repo, strictSSL) {
+  return new Promise(function(resolve, reject) {
+    request({
+      uri: base + repo,
+      headers: {
+        'User-Agent': 'jspm'
+      },
+      followRedirect: false,
+      strictSSL: strictSSL
+    })
+    .on('response', resolve)
+    .on('error', reject);
+  });
+};
+
+exports.getPackageConfig = function(base, repo, strictSSL) {
+  return asp(request)({
+    uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
+    headers: {
+      'User-Agent': 'jspm',
+      'Accept': 'application/vnd.github.v3.raw'
+    },
+    qs: {
+      ref: version
+    },
+    strictSSL: strictSSL
   });
 };
 
