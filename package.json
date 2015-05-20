@@ -28,5 +28,7 @@
     "which": "^1.0.9"
   },
   "homepage": "https://github.com/jspm/github",
-  "devDependencies": {}
+  "devDependencies": {
+    "mocha": "~2.2.4"
+  }
 }
