@@ -92,7 +92,7 @@ var GithubLocation = function(options, ui) {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
-    maxBuffer: 2 * 1024 * 1024
+    maxBuffer: this.max_repo_size || 2 * 1024 * 1024
   };
 
   this.remote = options.remote;
