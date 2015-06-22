@@ -19,6 +19,24 @@ var which = require('which');
 
 var netrc = require('netrc')();
 
+var Pool = require('./pool');
+var gitPool = new Pool(process.env.NUMBER_OF_PROCESSORS);
+
+function gitExec(command, execOpt, callback) {
+  if(process.platform === 'win32'){
+    return gitPool.execute(function() {
+      return new Promise(function(resolve){
+          exec('git ' + command, execOpt, function(err, stdout, stderr){
+              callback(err, stdout, stderr);
+              resolve();
+          });
+      });
+    });  
+  } else {
+    exec('git ' + command, execOpt, callback);
+  }
+}
+
 function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   hostname = hostname || 'github.com';
@@ -312,12 +330,10 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
-
-
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
-      exec('git ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+      gitExec('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
           if (err.toString().indexOf('not found') == -1) {
             // dont show plain text passwords in error
