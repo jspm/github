@@ -1,4 +1,3 @@
-var exec = require('child_process').exec;
 var fs = require('graceful-fs');
 var path = require('path');
 var mkdirp = require('mkdirp');
@@ -19,23 +18,7 @@ var which = require('which');
 
 var netrc = require('netrc')();
 
-var Pool = require('./pool');
-var gitPool = new Pool(Math.min(process.env.NUMBER_OF_PROCESSORS,2));
-
-function gitExec(command, execOpt, callback) {
-  if(process.platform === 'win32'){
-    return gitPool.execute(function() {
-      return new Promise(function(resolve){
-          exec('git ' + command, execOpt, function(err, stdout, stderr){
-              callback(err, stdout, stderr);
-              resolve();
-          });
-      });
-    });  
-  } else {
-    exec('git ' + command, execOpt, callback);
-  }
-}
+var execGit = require('./exec-git');
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
@@ -333,7 +316,7 @@ GithubLocation.prototype = {
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
     return new Promise(function(resolve, reject) {
-      gitExec('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
+      execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
           if (err.toString().indexOf('not found') == -1) {
             // dont show plain text passwords in error

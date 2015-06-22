@@ -1,4 +1,6 @@
 var Promise = require('rsvp').Promise;
+var exec = require('child_process').exec;
+var os = require('os');
 
 function Pool(count) {
   this.count = count;
@@ -44,4 +46,21 @@ Pool.prototype.execute = function(executionFunction) {
     return enqueue(this, executionFunction);
 };
 
-module.exports = Pool;
+if (process.platform === 'win32') {
+  var gitPool = new Pool(Math.min(os.cpus().length, 2));
+  module.exports = function(command, execOpt, callback) {
+    return gitPool.execute(function() {
+      return new Promise(function(resolve){
+        exec('git ' + command, execOpt, function(err, stdout, stderr){
+          callback(err, stdout, stderr);
+          resolve();
+        });
+      });
+    });
+  };
+}
+else {
+  module.exports = function(command, execOpt, callback) {
+    exec('git ' + command, execOpt, callback);
+  };
+}
