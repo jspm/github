@@ -20,7 +20,7 @@ var which = require('which');
 var netrc = require('netrc')();
 
 var Pool = require('./pool');
-var gitPool = new Pool(process.env.NUMBER_OF_PROCESSORS);
+var gitPool = new Pool(Math.min(process.env.NUMBER_OF_PROCESSORS,2));
 
 function gitExec(command, execOpt, callback) {
   if(process.platform === 'win32'){
