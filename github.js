@@ -89,6 +89,8 @@ var GithubLocation = function(options, ui) {
     this.auth = readNetrc(options.hostname);
   }
 
+  this.ui = ui;
+
   this.execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
@@ -409,12 +411,20 @@ GithubLocation.prototype = {
     });
   },
 
-  processPackageConfig: function(pjson) {
+  processPackageConfig: function(pjson, packageName) {
     if (!pjson.jspm || !pjson.jspm.files)
       delete pjson.files;
 
-    if (!pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies))
+    if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
+      if (packageName) {
+        var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
+        if (looksLikeNpm)
+          this.ui.log('warn', '`' + packageName + '` looks like an npm package. If using it as a browser global this should be ok. Alternatively you may want to try %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.\n');
+        else
+          this.ui.lo('warn', '`' + packageName + ' skipped as its a GitHub package with no registry property set. If this is your own package, add `"registry": "jspm"` to the package.json.\n');
+      }
       delete pjson.dependencies;
+    }
 
     // on GitHub, single package names ('jquery') are from jspm registry
     // double package names ('components/jquery') are from github registry
