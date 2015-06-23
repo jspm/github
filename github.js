@@ -148,7 +148,7 @@ function configureCredentials(config, ui) {
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%. Ensure it has `public_repo` scope access.');
     return ui.input('Enter your GitHub username');
   })
   .then(function(username) {
