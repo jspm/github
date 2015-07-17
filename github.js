@@ -75,7 +75,10 @@ var GithubLocation = function(options, ui) {
 
   this.versionString = options.versionString + '.1';
 
-  if (options.username && !options.auth) {
+  // Give the environment precedence over options object
+  if(process.env.JSPM_GITHUB_AUTH_TOKEN) {
+    options.auth = process.env.JSPM_GITHUB_AUTH_TOKEN;
+  } else if (options.username && !options.auth) {
     options.auth = encodeCredentials(options);
     // NB deprecate old auth eventually
     // delete options.username;
