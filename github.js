@@ -473,8 +473,8 @@ GithubLocation.prototype = {
         var inPipe;
 
         if (release.type == 'tar') {
-          inPipe = zlib.createGunzip()
-          .pipe(tar.Extract({ path: outDir, strip: 1 }))
+          (inPipe = zlib.createGunzip())
+          .pipe(tar.Extract({ path: outDir, strip: 0 }))
           .on('end', function() {
             resolve();
           })
