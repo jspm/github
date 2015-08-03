@@ -418,6 +418,8 @@ GithubLocation.prototype = {
     if (!pjson.jspm || !pjson.jspm.files)
       delete pjson.files;
 
+    var self = this;
+
     if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
       if (packageName) {
         var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
@@ -428,7 +430,7 @@ GithubLocation.prototype = {
         if (looksLikeNpm && !isSemver) {
           // delay so not drowned in own dependencies
           setTimeout(function() {
-            this.ui.log('warn', '`' + packageName + '` is a branch of an npm package on GitHub. It is being installed as if it were an npm package.');
+            self.ui.log('warn', '`' + packageName + '` is a branch of an npm package on GitHub. It is being installed as if it were an npm package.');
           }, 50);
           pjson.registry = 'npm';
         }
