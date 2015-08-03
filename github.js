@@ -421,34 +421,56 @@ GithubLocation.prototype = {
     if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
       if (packageName) {
         var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
-        if (looksLikeNpm)
-          this.ui.log('warn', '`' + packageName + '` looks like an npm package. If using it as a browser global this should be ok. Alternatively you may want to try %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.\n');
-        else
-          this.ui.lo('warn', '`' + packageName + ' skipped as its a GitHub package with no registry property set. If this is your own package, add `"registry": "jspm"` to the package.json.\n');
+        var isSemver = semver.valid(packageName.split('@').pop());
+        var noDepsMsg;
+
+        // non-semver npm installs on GitHub can be permitted as npm branch-tracking installs
+        if (looksLikeNpm && !isSemver) {
+          // delay so not drowned in own dependencies
+          setTimeout(function() {
+            this.ui.log('warn', '`' + packageName + '` is a branch of an npm package on GitHub. It is being installed as if it were an npm package.');
+          }, 50);
+          pjson.registry = 'npm';
+        }
+        else if (looksLikeNpm) {
+          noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead or install this package with a `regsitry: "npm"` override.';
+        }
+        else {
+          noDepsMsg = 'If this is your own package, add `"registry": "jspm"` to the package.json to ensure the dependencies are installed.'
+        }
+
+        if (noDepsMsg) {
+          delete pjson.dependencies;
+          this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set. ' + noDepsMsg + '\n');
+        }
       }
-      delete pjson.dependencies;
+      else {
+        delete pjson.dependencies;
+      }
     }
 
     // on GitHub, single package names ('jquery') are from jspm registry
     // double package names ('components/jquery') are from github registry
-    for (var d in pjson.dependencies) {
-      var depName = pjson.dependencies[d];
-      var depVersion;
+    if (!pjson.registry) {
+      for (var d in pjson.dependencies) {
+        var depName = pjson.dependencies[d];
+        var depVersion;
 
-      if (depName.indexOf(':') != -1)
-        continue;
+        if (depName.indexOf(':') != -1)
+          continue;
 
-      if (depName.indexOf('@') != -1) {
-        depName = depName.substr(0, depName.indexOf('@'));
-        depVersion = depName.substr(depName.indexOf('@') + 1);
+        if (depName.indexOf('@') != -1) {
+          depName = depName.substr(0, depName.indexOf('@'));
+          depVersion = depName.substr(depName.indexOf('@') + 1);
+        }
+        else {
+          depVersion = depName;
+          depName = d;
+        }
+
+        if (depName.split('/').length == 1)
+          pjson.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
       }
-      else {
-        depVersion = depName;
-        depName = d;
-      }
-
-      if (depName.split('/').length == 1)
-        pjson.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
     }
     return pjson;
   },
