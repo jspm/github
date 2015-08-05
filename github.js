@@ -427,15 +427,11 @@ GithubLocation.prototype = {
         var noDepsMsg;
 
         // non-semver npm installs on GitHub can be permitted as npm branch-tracking installs
-        if (looksLikeNpm && !isSemver) {
-          // delay so not drowned in own dependencies
-          setTimeout(function() {
-            self.ui.log('warn', '`' + packageName + '` is a branch of an npm package on GitHub. It is being installed as if it were an npm package.');
-          }, 50);
-          pjson.registry = 'npm';
-        }
-        else if (looksLikeNpm) {
-          noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead or install this package with a `regsitry: "npm"` override.';
+        if (looksLikeNpm) {
+          if (!isSemver)
+            noDepsMsg = 'To install this package as it would work on npm, install with a registry override via `jspm install ' + packageName + ' -o "{registry:\'npm\'}"`.'
+          else
+            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
         }
         else {
           noDepsMsg = 'If this is your own package, add `"registry": "jspm"` to the package.json to ensure the dependencies are installed.'
