@@ -429,7 +429,7 @@ GithubLocation.prototype = {
         // non-semver npm installs on GitHub can be permitted as npm branch-tracking installs
         if (looksLikeNpm) {
           if (!isSemver)
-            noDepsMsg = 'To install this package as it would work on npm, install with a registry override via `jspm install ' + packageName + ' -o "{registry:\'npm\'}"`.'
+            noDepsMsg = 'To install this package as it would work on npm, install with a registry override via %jspm install ' + packageName + ' -o "{registry:\'npm\'}"%.'
           else
             noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
         }
@@ -439,7 +439,7 @@ GithubLocation.prototype = {
 
         if (noDepsMsg) {
           delete pjson.dependencies;
-          this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set. ' + noDepsMsg + '\n');
+          this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set.\n' + noDepsMsg + '\n');
         }
       }
       else {
