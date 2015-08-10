@@ -421,7 +421,11 @@ GithubLocation.prototype = {
     var self = this;
 
     if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
-      if (packageName) {
+      var hasDependencies = false;
+      for (var p in pjson.dependencies)
+        hasDependencies = true;
+
+      if (packageName && hasDependencies) {
         var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
         var isSemver = semver.valid(packageName.split('@').pop());
         var noDepsMsg;
@@ -431,7 +435,7 @@ GithubLocation.prototype = {
           if (!isSemver)
             noDepsMsg = 'To install this package as it would work on npm, install with a registry override via %jspm install ' + packageName + ' -o "{registry:\'npm\'}"%.'
           else
-            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
+            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
         }
         else {
           noDepsMsg = 'If this is your own package, add `"registry": "jspm"` to the package.json to ensure the dependencies are installed.'
