@@ -16,7 +16,10 @@ var semver = require('semver');
 
 var which = require('which');
 
-var netrc = require('netrc')();
+try {
+  var netrc = require('netrc')();
+}
+catch(e) {}
 
 var execGit = require('./exec-git');
 
