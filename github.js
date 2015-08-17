@@ -10,7 +10,7 @@ var asp = require('rsvp').denodeify;
 var tar = require('tar');
 var zlib = require('zlib');
 
-var DecompressZip = require('decompress-zip');
+var yauzl = require('yauzl');
 
 var semver = require('semver');
 
@@ -135,6 +135,9 @@ function checkStripDir(dir) {
   return asp(fs.readdir)(dir)
   .then(function(files) {
     if (files.length > 1)
+      return dir;
+
+    if (!files.length)
       return dir;
 
     var dirPath = path.resolve(dir, files[0]);
@@ -515,17 +518,38 @@ GithubLocation.prototype = {
 
           inPipe = fs.createWriteStream(tmpFile)
           .on('finish', function() {
-            new Promise(function(resolve, reject) {
+            return clearDir(tmpDir)
+            .then(function() {
+              return asp(fs.mkdir(tmpDir));
+            })
+            .then(function() {
+              return new Promise(function(resolve, reject) {
 
-              var unzipper = new DecompressZip(tmpFile);
+                yauzl.open(tmpFile, function(err, zipFile) {
+                  if (err)
+                    return reject(err);
 
-              unzipper.on('error', reject);
-              unzipper.on('extract', resolve);
+                  zipFile.on('entry', function(entry) {
+                    var fileName = entry.fileName.replace(/[^\/]+\//, tmpDir + '/');
 
-              unzipper.extract({
-                path: tmpDir
-              });
+                    if (fileName[fileName.length - 1] == '/')
+                      return;
 
+                    zipFile.openReadStream(entry, function(err, readStream) {
+                      if (err)
+                        return reject(err);
+                      mkdirp(path.dirname(fileName), function(err) {
+                        if (err)
+                          return reject(err);
+                        readStream.pipe(fs.createWriteStream(fileName));
+                      });
+                    });
+                  });
+
+                  zipFile.on('close', resolve);
+                });
+
+              })
             })
             .then(function() {
              return checkStripDir(tmpDir);
