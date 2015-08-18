@@ -530,7 +530,7 @@ GithubLocation.prototype = {
                     return reject(err);
 
                   zipFile.on('entry', function(entry) {
-                    var fileName = entry.fileName.replace(/[^\/]+\//, tmpDir + '/');
+                    var fileName = tmpDir + '/' + entry.fileName;
 
                     if (fileName[fileName.length - 1] == '/')
                       return;
