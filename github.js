@@ -128,6 +128,30 @@ function prepDir(dir) {
   });
 }
 
+// check if the given directory contains one directory only
+// so that when we unzip, we should use the inner directory as
+// the directory
+function checkStripDir(dir) {
+  return asp(fs.readdir)(dir)
+  .then(function(files) {
+    if (files.length > 1)
+      return dir;
+
+    if (!files.length)
+      return dir;
+
+    var dirPath = path.resolve(dir, files[0]);
+
+    return asp(fs.stat)(dirPath)
+    .then(function(stat) {
+      if (stat.isDirectory())
+        return dirPath;
+
+      return dir;
+    });
+  });
+}
+
 function configureCredentials(config, ui) {
   var auth = {};
 
@@ -490,6 +514,8 @@ GithubLocation.prototype = {
           var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
           var tmpFile = tmpDir + '.' + release.type;
 
+          var repoDir;
+
           inPipe = fs.createWriteStream(tmpFile)
           .on('finish', function() {
             return clearDir(tmpDir)
@@ -504,7 +530,7 @@ GithubLocation.prototype = {
                     return reject(err);
 
                   zipFile.on('entry', function(entry) {
-                    var fileName = entry.fileName.replace(/[^\/]+\/|^/, tmpDir + '/');
+                    var fileName = entry.fileName.replace(/[^\/]+\//, tmpDir + '/');
 
                     if (fileName[fileName.length - 1] == '/')
                       return;
@@ -526,10 +552,14 @@ GithubLocation.prototype = {
               })
             })
             .then(function() {
+             return checkStripDir(tmpDir);
+            })
+            .then(function(_repoDir) {
+              repoDir = _repoDir;
               return asp(fs.rmdir)(outDir);
             })
             .then(function() {
-              return asp(fs.rename)(tmpDir, outDir);
+              return asp(fs.rename)(repoDir, outDir);
             })
             .then(function() {
               return asp(fs.unlink)(tmpFile);
