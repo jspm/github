@@ -162,10 +162,14 @@ function configureCredentials(config, ui) {
   })
   .then(function(username) {
     auth.username = username;
-    return ui.input('Enter your GitHub password or access token', null, true);
+    if (auth.username)
+      return ui.input('Enter your GitHub password or access token', null, true);
   })
   .then(function(password) {
     auth.password = password;
+    if (!auth.username)
+      return false;
+
     return ui.confirm('Would you like to test these credentials?', true);
   })
   .then(function(test) {
@@ -210,8 +214,10 @@ function configureCredentials(config, ui) {
           return configureCredentials(config, ui);
         return encodeCredentials(auth);
       });
-    else
+    else if (auth.username)
       return encodeCredentials(auth);
+    else
+      return null;
   });
 }
 
