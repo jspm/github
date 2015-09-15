@@ -278,7 +278,7 @@ GithubLocation.configure = function(config, ui) {
 };
 
 // regular expression to verify package names
-GithubLocation.packageFormat = /^[^\/]+\/[^\/]+/;
+GithubLocation.packageNameFormats = ['*/*'];
 
 GithubLocation.prototype = {
 
@@ -426,19 +426,19 @@ GithubLocation.prototype = {
     });
   },
 
-  processPackageConfig: function(pjson, packageName) {
-    if (!pjson.jspm || !pjson.jspm.files)
-      delete pjson.files;
+  processPackageConfig: function(packageConfig, packageName) {
+    if (!packageConfig.jspm || !packageConfig.jspm.files)
+      delete packageConfig.files;
 
     var self = this;
 
-    if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
+    if (packageConfig.dependencies && !packageConfig.registry && (!packageConfig.jspm || !packageConfig.jspm.dependencies)) {
       var hasDependencies = false;
-      for (var p in pjson.dependencies)
+      for (var p in packageConfig.dependencies)
         hasDependencies = true;
 
       if (packageName && hasDependencies) {
-        var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
+        var looksLikeNpm = packageConfig.name && packageConfig.version && (packageConfig.description || packageConfig.repository || packageConfig.author || packageConfig.license || packageConfig.scripts);
         var isSemver = semver.valid(packageName.split('@').pop());
         var noDepsMsg;
 
@@ -447,27 +447,27 @@ GithubLocation.prototype = {
           if (!isSemver)
             noDepsMsg = 'To install this package as it would work on npm, install with a registry override via %jspm install ' + packageName + ' -o "{registry:\'npm\'}"%.'
           else
-            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
+            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + packageConfig.name + '@^' + packageConfig.version + '% instead.';
         }
         else {
           noDepsMsg = 'If this is your own package, add `"registry": "jspm"` to the package.json to ensure the dependencies are installed.'
         }
 
         if (noDepsMsg) {
-          delete pjson.dependencies;
+          delete packageConfig.dependencies;
           this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set.\n' + noDepsMsg + '\n');
         }
       }
       else {
-        delete pjson.dependencies;
+        delete packageConfig.dependencies;
       }
     }
 
     // on GitHub, single package names ('jquery') are from jspm registry
     // double package names ('components/jquery') are from github registry
-    if (!pjson.registry) {
-      for (var d in pjson.dependencies) {
-        var depName = pjson.dependencies[d];
+    if (!packageConfig.registry) {
+      for (var d in packageConfig.dependencies) {
+        var depName = packageConfig.dependencies[d];
         var depVersion;
 
         if (depName.indexOf(':') != -1)
@@ -483,13 +483,13 @@ GithubLocation.prototype = {
         }
 
         if (depName.split('/').length == 1)
-          pjson.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
+          packageConfig.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
       }
     }
-    return pjson;
+    return packageConfig;
   },
 
-  download: function(repo, version, hash, meta, outDir) {
+  download: function(repo, version, hash, meta, targetDir) {
     if (meta.vPrefix)
       version = 'v' + version;
 
@@ -510,7 +510,7 @@ GithubLocation.prototype = {
 
         if (release.type == 'tar') {
           (inPipe = zlib.createGunzip())
-          .pipe(tar.Extract({ path: outDir, strip: 0 }))
+          .pipe(tar.Extract({ path: targetDir, strip: 0 }))
           .on('end', function() {
             resolve();
           })
@@ -562,10 +562,10 @@ GithubLocation.prototype = {
             })
             .then(function(_repoDir) {
               repoDir = _repoDir;
-              return asp(fs.rmdir)(outDir);
+              return asp(fs.rmdir)(targetDir);
             })
             .then(function() {
-              return asp(fs.rename)(repoDir, outDir);
+              return asp(fs.rename)(repoDir, targetDir);
             })
             .then(function() {
               return asp(fs.unlink)(tmpFile);
@@ -650,7 +650,7 @@ GithubLocation.prototype = {
 
           pkgRes
           .pipe(gzip)
-          .pipe(tar.Extract({ path: outDir, strip: 1 }))
+          .pipe(tar.Extract({ path: targetDir, strip: 1 }))
           .on('error', reject)
           .on('end', resolve);
 
@@ -716,22 +716,18 @@ GithubLocation.prototype = {
   },
 
   // check if the main entry point exists. If not, try the bower.json main.
-  build: function(pjson, dir) {
-    var main = pjson.main || '';
-    var libDir = pjson.directories && (pjson.directories.dist || pjson.directories.lib) || '.';
+  processPackage: function(packageConfig, packageName, packageDir) {
+    var main = packageConfig.main;
+    var libDir = packageConfig.directories && (packageConfig.directories.dist || packageConfig.directories.lib) || '.';
 
     if (main instanceof Array)
       main = main[0];
-
-    if (typeof main != 'string')
-      return;
+    else if (typeof main != 'string')
+      main = '';
 
     // convert to windows-style paths if necessary
     main = main.replace(/\//g, path.sep);
     libDir = libDir.replace(/\//g, path.sep);
-
-    if (main.indexOf('!') != -1)
-      return;
 
     function checkMain(main, libDir) {
       if (!main)
@@ -741,18 +737,21 @@ GithubLocation.prototype = {
         main = main.substr(0, main.length - 3);
 
       return new Promise(function(resolve, reject) {
-        fs.exists(path.resolve(dir, libDir || '.', main) + '.js', function(exists) {
+        fs.exists(path.resolve(packageDir, libDir || '.', main) + '.js', function(exists) {
           resolve(exists);
         });
       });
     }
 
+    // try in order:
+    // config main, bower main, packageName.js, index.js
     return checkMain(main, libDir)
     .then(function(hasMain) {
       if (hasMain)
-        return;
+        return true;
 
-      return asp(fs.readFile)(path.resolve(dir, 'bower.json'))
+      return asp(fs.readFile)(path.resolve(packageDir, 'bower.json'))
+      .catch(function() {})
       .then(function(bowerJson) {
         try {
           bowerJson = JSON.parse(bowerJson);
@@ -766,16 +765,27 @@ GithubLocation.prototype = {
           main = main[0];
 
         return checkMain(main);
-      }, function() {})
-      .then(function(hasBowerMain) {
-        if (!hasBowerMain)
-          return;
-
-        pjson.main = main;
       });
+    })
+    .then(function(hasMain) {
+      if (hasMain)
+        return true;
+
+      main = packageName.substr(packageName.lastIndexOf('/') + 1, packageName.length - packageName.lastIndexOf('@'));
+      return checkMain(main, libDir);
+    })
+    .then(function(hasMain) {
+      if (hasMain)
+        return true;
+
+      main = 'index'
+      return checkMain(main, libDir);
+    })
+    .then(function() {
+      packageConfig.main = main;
+      return packageConfig;
     });
   }
-
 };
 
 module.exports = GithubLocation;
