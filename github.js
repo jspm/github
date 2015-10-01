@@ -457,19 +457,21 @@ GithubLocation.prototype = {
     });
   },
 
-  processPackageConfig: function(pjson, packageName) {
-    if (!pjson.jspm || !pjson.jspm.files)
-      delete pjson.files;
+  processPackageConfig: function(packageConfig, packageName) {
+    if (!packageConfig.jspm || !packageConfig.jspm.files)
+      delete packageConfig.files;
 
     var self = this;
 
-    if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
+    if ((packageConfig.dependencies || packageConfig.peerDependencies) && !packageConfig.registry && (!packageConfig.jspm || !(packageConfig.jspm.dependencies || packageConfig.jspm.peerDependencies))) {
       var hasDependencies = false;
-      for (var p in pjson.dependencies)
+      for (var p in packageConfig.dependencies)
+        hasDependencies = true;
+      for (var p in packageConfig.peerDependencies)
         hasDependencies = true;
 
       if (packageName && hasDependencies) {
-        var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
+        var looksLikeNpm = packageConfig.name && packageConfig.version && (packageConfig.description || packageConfig.repository || packageConfig.author || packageConfig.license || packageConfig.scripts);
         var isSemver = semver.valid(packageName.split('@').pop());
         var noDepsMsg;
 
@@ -478,31 +480,37 @@ GithubLocation.prototype = {
           if (!isSemver)
             noDepsMsg = 'To install this package as it would work on npm, install with a registry override via %jspm install ' + packageName + ' -o "{registry:\'npm\'}"%.'
           else
-            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
+            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + packageConfig.name + '@^' + packageConfig.version + '% instead.';
         }
         else {
           noDepsMsg = 'If this is your own package, add `"registry": "jspm"` to the package.json to ensure the dependencies are installed.'
         }
 
         if (noDepsMsg) {
-          delete pjson.dependencies;
+          delete packageConfig.dependencies;
+          delete packageConfig.peerDependencies;
           this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set.\n' + noDepsMsg + '\n');
         }
       }
       else {
-        delete pjson.dependencies;
+        delete packageConfig.dependencies;
+        delete packageConfig.peerDependencies;
       }
     }
 
     // on GitHub, single package names ('jquery') are from jspm registry
     // double package names ('components/jquery') are from github registry
-    if (!pjson.registry) {
-      for (var d in pjson.dependencies) {
-        var depName = pjson.dependencies[d];
+    if (!packageConfig.registry || packageConfig.registry == 'github') {
+      for (var d in packageConfig.dependencies)
+        packageConfig.dependencies[d] = convertDependency(d, packageConfig.dependencies[d]);
+      for (var d in packageConfig.peerDependencies)
+        packageConfig.peerDependencies[d] = convertDependency(d, packageConfig.peerDependencies[d]);
+
+      function convertDependency(d, depName) {
         var depVersion;
 
         if (depName.indexOf(':') != -1)
-          continue;
+          return depName;
 
         if (depName.indexOf('@') != -1) {
           depName = depName.substr(0, depName.indexOf('@'));
@@ -514,10 +522,12 @@ GithubLocation.prototype = {
         }
 
         if (depName.split('/').length == 1)
-          pjson.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
+          return 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
+
+        return depName;
       }
     }
-    return pjson;
+    return packageConfig;
   },
 
   download: function(repo, version, hash, meta, outDir) {
