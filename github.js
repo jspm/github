@@ -815,7 +815,7 @@ GithubLocation.prototype = {
     return checkMain(main, libDir)
     .then(function(hasMain) {
       if (hasMain)
-        return;
+        return hasMain;
 
       return asp(fs.readFile)(path.resolve(dir, 'bower.json'))
       .then(function(bowerJson) {
@@ -833,11 +833,17 @@ GithubLocation.prototype = {
         return checkMain(main);
       }, function() {})
       .then(function(hasBowerMain) {
-        if (!hasBowerMain)
-          return;
+        if (hasBowerMain)
+          return hasBrowserMain;
 
-        pjson.main = main;
+        main = 'index';
+        return checkMain(main, libDir);
       });
+    })
+    .then(function(hasMain) {
+      if (hasMain)
+        packageConfig.main = main;
+      return packageConfig;
     });
   }
 
