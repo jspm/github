@@ -510,7 +510,13 @@ GithubLocation.prototype = {
 
         if (release.type == 'tar') {
           (inPipe = zlib.createGunzip())
-          .pipe(tar.Extract({ path: outDir, strip: 0 }))
+          .pipe(tar.Extract({
+            path: outDir, 
+            strip: 0,
+            filter: function() {
+              return !this.type.match(/^.*Link$/);
+            }
+          }))
           .on('end', function() {
             resolve();
           })
