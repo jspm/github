@@ -3,6 +3,7 @@ var path = require('path');
 var mkdirp = require('mkdirp');
 var rimraf = require('rimraf');
 var request = require('request');
+var expandTilde = require('expand-tilde');
 
 var Promise = require('rsvp').Promise;
 var asp = require('rsvp').denodeify;
@@ -15,6 +16,8 @@ var yauzl = require('yauzl');
 var semver = require('semver');
 
 var which = require('which');
+
+var merge = require('merge')
 
 try {
   var netrc = require('netrc')();
@@ -71,7 +74,17 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
-  this.strictSSL = 'strictSSL' in options ? options.strictSSL : true;
+  this.defaultOptions = {
+    strictSSL: 'strictSSL' in options ? options.strictSSL : true
+  };
+
+  for (var i = 0, keys = ["ca", "cert", "key"]; i < keys.length; i++) {
+    var key = keys[i];
+    if (key in options) {
+      this.defaultOptions[key] = fs.readFileSync(expandTilde(options[key]), 'ascii');
+    }
+  }
+
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -292,14 +305,13 @@ GithubLocation.prototype = {
 
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
-      request({
+      request(merge(true, self.defaultOptions, {
         uri: remoteString + repo,
         headers: {
           'User-Agent': 'jspm'
         },
-        followRedirect: false,
-        strictSSL: self.strictSSL
-      })
+        followRedirect: false
+      }))
       .on('response', function(res) {
         // redirect
         if (res.statusCode == 301)
@@ -390,7 +402,7 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)({
+    return asp(request)(merge(true, this.defaultOptions, {
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
         'User-Agent': 'jspm',
@@ -398,9 +410,8 @@ GithubLocation.prototype = {
       },
       qs: {
         ref: version
-      },
-      strictSSL: this.strictSSL
-    }).then(function(res) {
+      }
+    })).then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
         return rateLimitResponse;
@@ -585,7 +596,7 @@ GithubLocation.prototype = {
         }
 
         // now that the inPipe is ready, do the request
-        request({
+        request(merge(true, self.defaultOptions, {
           uri: release.url,
           headers: {
             'accept': 'application/octet-stream',
@@ -595,9 +606,8 @@ GithubLocation.prototype = {
           auth: self.auth && {
             user: self.auth.username,
             pass: self.auth.password
-          },
-          strictSSL: self.strictSSL
-        }).on('response', function(archiveRes) {
+          }
+        })).on('response', function(archiveRes) {
           var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
           if (rateLimitResponse)
             return rateLimitResponse.then(resolve, reject);
@@ -605,14 +615,13 @@ GithubLocation.prototype = {
           if (archiveRes.statusCode != 302)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
-          request({
+          request(merge(true, self.defaultOptions, {
             uri: archiveRes.headers.location,
             headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
-            },
-            strictSSL: self.strictSSL
-          })
+            }
+          }))
           .on('response', function(archiveRes) {
 
             if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
@@ -638,11 +647,10 @@ GithubLocation.prototype = {
 
       // Download from the git archive
       return new Promise(function(resolve, reject) {
-        request({
+        request(merge(true, self.defaultOptions, {
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' },
-          strictSSL: self.strictSSL
-        })
+          headers: { 'accept': 'application/octet-stream' }
+        }))
         .on('response', function(pkgRes) {
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
@@ -670,15 +678,14 @@ GithubLocation.prototype = {
 
   checkReleases: function(repo, version) {
     // NB cache this on disk with etags
-    var reqOptions = {
+    var reqOptions = merge(true, this.defaultOptions, {
       uri: this.apiRemoteString + 'repos/' + repo + '/releases',
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
       },
-      followRedirect: false,
-      strictSSL: this.strictSSL
-    };
+      followRedirect: false
+    });
 
     return asp(request)(reqOptions)
     .then(function(res) {
