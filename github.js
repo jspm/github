@@ -434,8 +434,12 @@ GithubLocation.prototype = {
 
     if ((packageConfig.peerDependencies || packageConfig.dependencies) && !packageConfig.registry && (!packageConfig.jspm || !packageConfig.jspm.dependencies)) {
       var hasDependencies = false;
-      for (var p in packageConfig.dependencies)
+
+      if (Object.keys(packageConfig.dependencies || {}).length > 0) {
         hasDependencies = true;
+      } else if (Object.keys(packageConfig.peerDependencies || {}).length > 0) {
+        hasDependencies = true;
+      }
 
       if (packageName && hasDependencies) {
         var looksLikeNpm = packageConfig.name && packageConfig.version && (packageConfig.description || packageConfig.repository || packageConfig.author || packageConfig.license || packageConfig.scripts);
