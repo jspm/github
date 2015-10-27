@@ -101,7 +101,7 @@ var GithubLocation = function(options, ui) {
     if (key in options) {
       self.defaultRequestOptions[key] = options[key];
     }
-  }
+  });
 
   this.name = options.name;
 
