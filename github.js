@@ -17,7 +17,20 @@ var semver = require('semver');
 
 var which = require('which');
 
-var merge = require('merge')
+function extend(dest) {
+  for (var i = 1, len = arguments.length; i < len; i++) {
+    var src = arguments[i];
+    for (var key in src) {
+      if (typeof src[key] === 'object') {
+        dest[key] = extend({}, src[key])
+      } else {
+        dest[key] = src[key];
+      }
+    }
+  }
+
+  return dest;
+}
 
 try {
   var netrc = require('netrc')();
@@ -74,14 +87,19 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
-  this.defaultOptions = {
+  this.defaultRequestOptions = {
     strictSSL: 'strictSSL' in options ? options.strictSSL : true
   };
 
-  for (var i = 0, keys = ["ca", "cert", "key"]; i < keys.length; i++) {
-    var key = keys[i];
+  var self = this;
+  ['ca', 'cert', 'key', 'pfx'].forEach(function(key) {
     if (key in options) {
-      this.defaultOptions[key] = fs.readFileSync(expandTilde(options[key]), 'ascii');
+      self.defaultRequestOptions[key] = fs.readFileSync(expandTilde(options[key]), key === 'pfx' ? 'binary' : 'ascii');
+    }
+  });
+  ['passphrase'].forEach(function(key) {
+    if (key in options) {
+      self.defaultRequestOptions[key] = options[key];
     }
   }
 
@@ -305,7 +323,7 @@ GithubLocation.prototype = {
 
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
-      request(merge(true, self.defaultOptions, {
+      request(extend({}, self.defaultRequestOptions, {
         uri: remoteString + repo,
         headers: {
           'User-Agent': 'jspm'
@@ -402,7 +420,7 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)(merge(true, this.defaultOptions, {
+    return asp(request)(extend({}, this.defaultRequestOptions, {
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
         'User-Agent': 'jspm',
@@ -596,7 +614,7 @@ GithubLocation.prototype = {
         }
 
         // now that the inPipe is ready, do the request
-        request(merge(true, self.defaultOptions, {
+        request(extend({}, self.defaultRequestOptions, {
           uri: release.url,
           headers: {
             'accept': 'application/octet-stream',
@@ -615,7 +633,7 @@ GithubLocation.prototype = {
           if (archiveRes.statusCode != 302)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
-          request(merge(true, self.defaultOptions, {
+          request(extend({}, self.defaultRequestOptions, {
             uri: archiveRes.headers.location,
             headers: {
               'accept': 'application/octet-stream',
@@ -647,7 +665,7 @@ GithubLocation.prototype = {
 
       // Download from the git archive
       return new Promise(function(resolve, reject) {
-        request(merge(true, self.defaultOptions, {
+        request(extend({}, self.defaultRequestOptions, {
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
           headers: { 'accept': 'application/octet-stream' }
         }))
@@ -678,7 +696,7 @@ GithubLocation.prototype = {
 
   checkReleases: function(repo, version) {
     // NB cache this on disk with etags
-    var reqOptions = merge(true, this.defaultOptions, {
+    var reqOptions = extend({}, this.defaultRequestOptions, {
       uri: this.apiRemoteString + 'repos/' + repo + '/releases',
       headers: {
         'User-Agent': 'jspm',
