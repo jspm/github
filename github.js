@@ -87,22 +87,6 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
-  this.defaultRequestOptions = {
-    strictSSL: 'strictSSL' in options ? options.strictSSL : true
-  };
-
-  var self = this;
-  ['ca', 'cert', 'key', 'pfx'].forEach(function(key) {
-    if (key in options) {
-      self.defaultRequestOptions[key] = fs.readFileSync(expandTilde(options[key]), key === 'pfx' ? 'binary' : 'ascii');
-    }
-  });
-  ['passphrase'].forEach(function(key) {
-    if (key in options) {
-      self.defaultRequestOptions[key] = options[key];
-    }
-  });
-
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -132,8 +116,33 @@ var GithubLocation = function(options, ui) {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
-    maxBuffer: this.max_repo_size || 2 * 1024 * 1024
+    maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
+    env: {
+      PATH: process.env.PATH
+    }
   };
+
+  this.defaultRequestOptions = {
+    strictSSL: 'strictSSL' in options ? options.strictSSL : true
+  };
+
+  if (!this.defaultRequestOptions.strictSSL) {
+    this.execOpt.env.GIT_SSL_NO_VERIFY = '1'
+  }
+
+  var self = this, envMap = {
+    ca: 'GIT_SSL_CAINFO',
+    cert: 'GIT_SSL_CERT',
+    key: 'GIT_SSL_KEY'
+  };
+
+  ['ca', 'cert', 'key'].forEach(function(key) {
+    if (key in options) {
+      var path = expandTilde(options[key]);
+      self.execOpt.env[envMap[key]] = path;
+      self.defaultRequestOptions[key] = fs.readFileSync(path, 'ascii');
+    }
+  });
 
   this.remote = options.remote;
 
