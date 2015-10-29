@@ -3,6 +3,7 @@ var path = require('path');
 var mkdirp = require('mkdirp');
 var rimraf = require('rimraf');
 var request = require('request');
+var expandTilde = require('expand-tilde');
 
 var Promise = require('rsvp').Promise;
 var asp = require('rsvp').denodeify;
@@ -15,6 +16,14 @@ var yauzl = require('yauzl');
 var semver = require('semver');
 
 var which = require('which');
+
+function extend(dest, src) {
+  for (var key in src) {
+    dest[key] = src[key]
+  }
+
+  return dest;
+}
 
 try {
   var netrc = require('netrc')();
@@ -71,7 +80,6 @@ var GithubLocation = function(options, ui) {
     throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
   }
 
-  this.strictSSL = 'strictSSL' in options ? options.strictSSL : true;
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -101,8 +109,33 @@ var GithubLocation = function(options, ui) {
     cwd: options.tmpDir,
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
-    maxBuffer: this.max_repo_size || 2 * 1024 * 1024
+    maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
+    env: {
+      PATH: process.env.PATH
+    }
   };
+
+  this.defaultRequestOptions = {
+    strictSSL: 'strictSSL' in options ? options.strictSSL : true
+  };
+
+  if (!this.defaultRequestOptions.strictSSL) {
+    this.execOpt.env.GIT_SSL_NO_VERIFY = '1'
+  }
+
+  var self = this, envMap = {
+    ca: 'GIT_SSL_CAINFO',
+    cert: 'GIT_SSL_CERT',
+    key: 'GIT_SSL_KEY'
+  };
+
+  ['ca', 'cert', 'key'].forEach(function(key) {
+    if (key in options) {
+      var path = expandTilde(options[key]);
+      self.execOpt.env[envMap[key]] = path;
+      self.defaultRequestOptions[key] = fs.readFileSync(path, 'ascii');
+    }
+  });
 
   this.remote = options.remote;
 
@@ -292,14 +325,14 @@ GithubLocation.prototype = {
 
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
-      request({
+      request(extend({
         uri: remoteString + repo,
         headers: {
           'User-Agent': 'jspm'
         },
-        followRedirect: false,
-        strictSSL: self.strictSSL
-      })
+        followRedirect: false
+      }, self.defaultRequestOptions
+      ))
       .on('response', function(res) {
         // redirect
         if (res.statusCode == 301)
@@ -390,7 +423,7 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)({
+    return asp(request)(extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
         'User-Agent': 'jspm',
@@ -398,9 +431,9 @@ GithubLocation.prototype = {
       },
       qs: {
         ref: version
-      },
-      strictSSL: this.strictSSL
-    }).then(function(res) {
+      }
+    }, this.defaultRequestOptions
+    )).then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
         return rateLimitResponse;
@@ -585,7 +618,7 @@ GithubLocation.prototype = {
         }
 
         // now that the inPipe is ready, do the request
-        request({
+        request(extend({
           uri: release.url,
           headers: {
             'accept': 'application/octet-stream',
@@ -595,9 +628,9 @@ GithubLocation.prototype = {
           auth: self.auth && {
             user: self.auth.username,
             pass: self.auth.password
-          },
-          strictSSL: self.strictSSL
-        }).on('response', function(archiveRes) {
+          }
+        }, self.defaultRequestOptions
+        )).on('response', function(archiveRes) {
           var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
           if (rateLimitResponse)
             return rateLimitResponse.then(resolve, reject);
@@ -605,14 +638,13 @@ GithubLocation.prototype = {
           if (archiveRes.statusCode != 302)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
-          request({
-            uri: archiveRes.headers.location,
-            headers: {
+          request(extend({
+            uri: archiveRes.headers.location, headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
-            },
-            strictSSL: self.strictSSL
-          })
+            }
+          }, self.defaultRequestOptions
+          ))
           .on('response', function(archiveRes) {
 
             if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
@@ -638,11 +670,11 @@ GithubLocation.prototype = {
 
       // Download from the git archive
       return new Promise(function(resolve, reject) {
-        request({
+        request(extend({
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' },
-          strictSSL: self.strictSSL
-        })
+          headers: { 'accept': 'application/octet-stream' }
+        }, self.defaultRequestOptions
+        ))
         .on('response', function(pkgRes) {
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
@@ -670,15 +702,14 @@ GithubLocation.prototype = {
 
   checkReleases: function(repo, version) {
     // NB cache this on disk with etags
-    var reqOptions = {
+    var reqOptions = extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/releases',
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
       },
-      followRedirect: false,
-      strictSSL: this.strictSSL
-    };
+      followRedirect: false
+    }, this.defaultRequestOptions);
 
     return asp(request)(reqOptions)
     .then(function(res) {
