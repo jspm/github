@@ -17,16 +17,9 @@ var semver = require('semver');
 
 var which = require('which');
 
-function extend(dest) {
-  for (var i = 1, len = arguments.length; i < len; i++) {
-    var src = arguments[i];
-    for (var key in src) {
-      if (typeof src[key] === 'object') {
-        dest[key] = extend({}, src[key])
-      } else {
-        dest[key] = src[key];
-      }
-    }
+function extend(dest, src) {
+  for (var key in src) {
+    dest[key] = src[key]
   }
 
   return dest;
@@ -332,13 +325,14 @@ GithubLocation.prototype = {
 
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
-      request(extend({}, self.defaultRequestOptions, {
+      request(extend({
         uri: remoteString + repo,
         headers: {
           'User-Agent': 'jspm'
         },
         followRedirect: false
-      }))
+      }, self.defaultRequestOptions
+      ))
       .on('response', function(res) {
         // redirect
         if (res.statusCode == 301)
@@ -429,7 +423,7 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)(extend({}, this.defaultRequestOptions, {
+    return asp(request)(extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
         'User-Agent': 'jspm',
@@ -438,7 +432,8 @@ GithubLocation.prototype = {
       qs: {
         ref: version
       }
-    })).then(function(res) {
+    }, this.defaultRequestOptions
+    )).then(function(res) {
       var rateLimitResponse = checkRateLimit.call(this, res.headers);
       if (rateLimitResponse)
         return rateLimitResponse;
@@ -623,7 +618,7 @@ GithubLocation.prototype = {
         }
 
         // now that the inPipe is ready, do the request
-        request(extend({}, self.defaultRequestOptions, {
+        request(extend({
           uri: release.url,
           headers: {
             'accept': 'application/octet-stream',
@@ -634,7 +629,8 @@ GithubLocation.prototype = {
             user: self.auth.username,
             pass: self.auth.password
           }
-        })).on('response', function(archiveRes) {
+        }, self.defaultRequestOptions
+        )).on('response', function(archiveRes) {
           var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
           if (rateLimitResponse)
             return rateLimitResponse.then(resolve, reject);
@@ -642,13 +638,13 @@ GithubLocation.prototype = {
           if (archiveRes.statusCode != 302)
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
-          request(extend({}, self.defaultRequestOptions, {
-            uri: archiveRes.headers.location,
-            headers: {
+          request(extend({
+            uri: archiveRes.headers.location, headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
             }
-          }))
+          }, self.defaultRequestOptions
+          ))
           .on('response', function(archiveRes) {
 
             if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
@@ -674,10 +670,11 @@ GithubLocation.prototype = {
 
       // Download from the git archive
       return new Promise(function(resolve, reject) {
-        request(extend({}, self.defaultRequestOptions, {
+        request(extend({
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
           headers: { 'accept': 'application/octet-stream' }
-        }))
+        }, self.defaultRequestOptions
+        ))
         .on('response', function(pkgRes) {
           if (pkgRes.statusCode != 200)
             return reject('Bad response code ' + pkgRes.statusCode);
@@ -705,14 +702,14 @@ GithubLocation.prototype = {
 
   checkReleases: function(repo, version) {
     // NB cache this on disk with etags
-    var reqOptions = extend({}, this.defaultRequestOptions, {
+    var reqOptions = extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/releases',
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
       },
       followRedirect: false
-    });
+    }, this.defaultRequestOptions);
 
     return asp(request)(reqOptions)
     .then(function(res) {
