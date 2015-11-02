@@ -110,9 +110,7 @@ var GithubLocation = function(options, ui) {
     timeout: options.timeout * 1000,
     killSignal: 'SIGKILL',
     maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
-    env: {
-      PATH: process.env.PATH
-    }
+    env: extend({}, process.env)
   };
 
   this.defaultRequestOptions = {
