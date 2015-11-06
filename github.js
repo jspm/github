@@ -686,7 +686,13 @@ GithubLocation.prototype = {
 
           pkgRes
           .pipe(gzip)
-          .pipe(tar.Extract({ path: outDir, strip: 1 }))
+          .pipe(tar.Extract({
+            path: outDir,
+            strip: 1,
+            filter: function() {
+              return !this.type.match(/^.*Link$/);
+            }
+          }))
           .on('error', reject)
           .on('end', resolve);
 
