@@ -96,7 +96,7 @@ var GithubLocation = function(options, ui) {
     // delete options.password;
   }
 
-  if (options.auth) {
+  if (typeof options.auth == 'string') {
     this.auth = decodeCredentials(options.auth);
   }
   else {
