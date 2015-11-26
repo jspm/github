@@ -5,13 +5,11 @@ var rimraf = require('rimraf');
 var request = require('request');
 var expandTilde = require('expand-tilde');
 
-var Promise = require('rsvp').Promise;
-var asp = require('rsvp').denodeify;
+var Promise = require('bluebird');
+var asp = require('bluebird').Promise.promisify;
 
 var tar = require('tar');
 var zlib = require('zlib');
-
-var yauzl = require('yauzl');
 
 var semver = require('semver');
 
@@ -263,31 +261,7 @@ function configureCredentials(config, ui) {
   });
 }
 
-function checkRateLimit(headers) {
-  if (headers.status.match(/^401/))
-    throw 'Unauthorized response for GitHub API.\n' +
-      'Use %jspm registry config github% to reconfigure the credentials, or update them in your ~/.netrc file.';
-  if (headers.status.match(/^406/))
-    throw 'Unauthorized response for GitHub API.\n' +
-      'If using an access token ensure it has public_repo access.\n' +
-      'Use %jspm registry config github% to configure the credentials, or add them to your ~/.netrc file.';
-
-  if (headers['x-ratelimit-remaining'] != '0')
-    return;
-
-  var remaining = (headers['x-ratelimit-reset'] * 1000 - new Date(headers.date).getTime()) / 60000;
-
-  if (this.auth)
-    return Promise.reject('\nGitHub rate limit reached, with authentication enabled.' +
-        '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
-
-  var err = new Error('GitHub rate limit reached.');
-  err.config = true;
-  err.hideStack = true;
-
-  return Promise.reject(err);
-}
-
+var apiWarned = false;
 
 // static configuration function
 GithubLocation.configure = function(config, ui) {
@@ -432,7 +406,10 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)(extend({
+    var self = this;
+    var ui = this.ui;
+
+    return asp(request)({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
       headers: {
         'User-Agent': 'jspm',
@@ -440,23 +417,37 @@ GithubLocation.prototype = {
       },
       qs: {
         ref: version
-      }
-    }, this.defaultRequestOptions
-    )).then(function(res) {
-      var rateLimitResponse = checkRateLimit.call(this, res.headers);
-      if (rateLimitResponse)
-        return rateLimitResponse;
+      },
+      strictSSL: this.strictSSL
+    }).then(function(res) {
+      // API auth failure warnings
+      function apiFailWarn(reason, showAuthCommand) {
+        if (apiWarned)
+          return;
 
-      if (res.statusCode == 404) {
-        // it is quite valid for a repo not to have a package.json
-        return {};
+        ui.log('warn', 'Unable to use the GitHub API to speed up dependency downloads due to ' + reason
+            + (showAuthCommand ? '\nTo resolve use %jspm registry config github% to configure the credentials, or update them in your ~/.netrc file.' : ''));
+        apiWarned = true;
       }
-
+      
+      if (res.headers.status.match(/^401/))
+        return apiFailWarn('lack of authorization', true);
+      if (res.headers.status.match(/^406/))
+        return apiFailWarn('insufficient permissions. Ensure you have public_repo access.');
+      if (res.headers['x-ratelimit-remaining'] == '0') {
+        if (self.auth)
+          return apiFailWarn('the rate limit being reached, which will be reset in `' + 
+              Math.round((res.headers['x-ratelimit-reset'] * 1000 - new Date(res.headers.date).getTime()) / 60000) + ' minutes`.');
+        return apiFailWarn('the rate limit being reached.', true);
+      }
       if (res.statusCode != 200)
-        throw 'Unable to check repo package.json for release, status code ' + res.statusCode;
+        return apiFailWarn('invalid response code ' + res.statusCode + '.');
+
+      // it is quite valid for a repo not to have a package.json
+      if (res.statusCode == 404)
+        return {};
 
       var packageJSON;
-
       try {
         packageJSON = JSON.parse(res.body);
       }
@@ -551,243 +542,40 @@ GithubLocation.prototype = {
 
     var self = this;
 
-    return this.checkReleases(repo, version)
-    .then(function(release) {
-      if (!release)
-        return true;
-
-      // Download from the release archive
-      return new Promise(function(resolve, reject) {
-        var inPipe;
-
-        if (release.type == 'tar') {
-          (inPipe = zlib.createGunzip())
-          .pipe(tar.Extract({
-            path: outDir, 
-            strip: 0,
-            filter: function() {
-              return !this.type.match(/^.*Link$/);
-            }
-          }))
-          .on('end', function() {
-            resolve();
-          })
-          .on('error', reject);
-        }
-        else if (release.type == 'zip') {
-          var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
-          var tmpFile = tmpDir + '.' + release.type;
-
-          var repoDir;
-
-          inPipe = fs.createWriteStream(tmpFile)
-          .on('finish', function() {
-            return clearDir(tmpDir)
-            .then(function() {
-              return asp(fs.mkdir(tmpDir));
-            })
-            .then(function() {
-              return new Promise(function(resolve, reject) {
-                var files = [];
-                yauzl.open(tmpFile, function(err, zipFile) {
-                  if (err)
-                    return reject(err);
-
-                  zipFile.on('entry', function(entry) {
-                    var fileName = tmpDir + '/' + entry.fileName;
-
-                    if (fileName[fileName.length - 1] == '/')
-                      return;
-
-                    zipFile.openReadStream(entry, function(err, readStream) {
-                      if (err)
-                        return reject(err);
-                      mkdirp(path.dirname(fileName), function(err) {
-                        if (err)
-                          return reject(err);
-                        files.push(new Promise(function(_resolve, _reject) {
-                            var p = fs.createWriteStream(fileName).on("close", function(err) {
-                                if (err) _reject(err);
-                                _resolve();
-                            });
-                            readStream.pipe(p);
-                        }));
-                      });
-                    });
-                  });
-                  zipFile.on('close', function() {
-                      Promise.all(files).then(function() {
-                          resolve();
-                      }).catch(function(e) {
-                          reject(e);
-                      });
-                  });
-                });
-
-
-              })
-            })
-            .then(function() {
-             return checkStripDir(tmpDir);
-            })
-            .then(function(_repoDir) {
-              repoDir = _repoDir;
-              return asp(fs.rmdir)(outDir);
-            })
-            .then(function() {
-              return asp(fs.rename)(repoDir, outDir);
-            })
-            .then(function() {
-              return asp(fs.unlink)(tmpFile);
-            })
-            .then(resolve, reject);
-          })
-          .on('error', reject);
-        }
-        else {
-          throw 'GitHub release found, but no archive present.';
-        }
-
-        // now that the inPipe is ready, do the request
-        request(extend({
-          uri: release.url,
-          headers: {
-            'accept': 'application/octet-stream',
-            'user-agent': 'jspm'
-          },
-          followRedirect: false,
-          auth: self.auth && {
-            user: self.auth.username,
-            pass: self.auth.password
-          }
-        }, self.defaultRequestOptions
-        )).on('response', function(archiveRes) {
-          var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
-          if (rateLimitResponse)
-            return rateLimitResponse.then(resolve, reject);
-
-          if (archiveRes.statusCode != 302)
-            return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
-
-          request(extend({
-            uri: archiveRes.headers.location, headers: {
-              'accept': 'application/octet-stream',
-              'user-agent': 'jspm'
-            }
-          }, self.defaultRequestOptions
-          ))
-          .on('response', function(archiveRes) {
-
-            if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
-              return reject('Response too large.');
-
-            archiveRes.pause();
-
-            archiveRes.pipe(inPipe);
-
-            archiveRes.on('error', reject);
-
-            archiveRes.resume();
-
-          })
-          .on('error', reject);
-        })
-        .on('error', reject);
-      });
-    })
-    .then(function(git) {
-      if (!git)
-        return;
-
-      // Download from the git archive
-      return new Promise(function(resolve, reject) {
-        request(extend({
-          uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' }
-        }, self.defaultRequestOptions
-        ))
-        .on('response', function(pkgRes) {
-          if (pkgRes.statusCode != 200)
-            return reject('Bad response code ' + pkgRes.statusCode);
-
-          if (max_repo_size && pkgRes.headers['content-length'] > max_repo_size)
-            return reject('Response too large.');
-
-          pkgRes.pause();
-
-          var gzip = zlib.createGunzip();
-
-          pkgRes
-          .pipe(gzip)
-          .pipe(tar.Extract({
-            path: outDir,
-            strip: 1,
-            filter: function() {
-              return !this.type.match(/^.*Link$/);
-            }
-          }))
-          .on('error', reject)
-          .on('end', resolve);
-
-          pkgRes.resume();
-
-        })
-        .on('error', reject);
-      });
-    });
-  },
-
-  checkReleases: function(repo, version) {
-    // NB cache this on disk with etags
-    var reqOptions = extend({
-      uri: this.apiRemoteString + 'repos/' + repo + '/releases',
-      headers: {
-        'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.v3+json'
-      },
-      followRedirect: false
-    }, this.defaultRequestOptions);
-
-    return asp(request)(reqOptions)
-    .then(function(res) {
-      var rateLimitResponse = checkRateLimit.call(this, res.headers);
-      if (rateLimitResponse)
-        return rateLimitResponse;
-      return Promise.resolve()
-      .then(function() {
-        try {
-          return JSON.parse(res.body);
-        }
-        catch(e) {
-          throw 'Unable to parse GitHub API response';
-        }
+    // Download from the git archive
+    return new Promise(function(resolve, reject) {
+      request({
+        uri: remoteString + repo + '/archive/' + version + '.tar.gz',
+        headers: { 'accept': 'application/octet-stream' },
+        strictSSL: self.strictSSL
       })
-      .then(function(releases) {
-        // run through releases list to see if we have this version tag
-        for (var i = 0; i < releases.length; i++) {
-          var tagName = (releases[i].tag_name || '').trim();
+      .on('response', function(pkgRes) {
+        if (pkgRes.statusCode != 200)
+          return reject('Bad response code ' + pkgRes.statusCode);
 
-          if (tagName == version) {
-            var firstAsset = releases[i].assets.filter(function(asset) {
-              if (asset.name.substr(asset.name.length - 7, 7) == '.tar.gz' || asset.name.substr(asset.name.length - 4, 4) == '.tgz')
-                asset.fileType = 'tar';
-              else if (asset.name.substr(asset.name.length - 4, 4) == '.zip')
-                asset.fileType = 'zip';
-              return !!asset.fileType;
-            })
-            .sort(function(asset) {
-              // src.zip comes after file.zip
-              return asset.name.indexOf('src') == -1 ? -1 : 1;
-            })[0];
-            
-            if (!firstAsset)
-              return false;
+        if (max_repo_size && pkgRes.headers['content-length'] > max_repo_size)
+          return reject('Response too large.');
 
-            return { url: firstAsset.url, type: firstAsset.fileType };
+        pkgRes.pause();
+
+        var gzip = zlib.createGunzip();
+
+        pkgRes
+        .pipe(gzip)
+        .pipe(tar.Extract({
+          path: outDir,
+          strip: 1, 
+          filter: function() {
+            return !this.type.match(/^.*Link$/);
           }
-        }
-        return false;
-      });
+        }))
+        .on('error', reject)
+        .on('end', resolve);
+
+        pkgRes.resume();
+
+      })
+      .on('error', reject);
     });
   },
 
