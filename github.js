@@ -567,7 +567,7 @@ GithubLocation.prototype = {
             })
             .then(function() {
               return new Promise(function(resolve, reject) {
-
+                var files = [];
                 yauzl.open(tmpFile, function(err, zipFile) {
                   if (err)
                     return reject(err);
@@ -584,13 +584,25 @@ GithubLocation.prototype = {
                       mkdirp(path.dirname(fileName), function(err) {
                         if (err)
                           return reject(err);
-                        readStream.pipe(fs.createWriteStream(fileName));
+                        files.push(new Promise(function(_resolve, _reject) {
+                            var p = fs.createWriteStream(fileName).on("close", function(err) {
+                                if (err) _reject(err);
+                                _resolve();
+                            });
+                            readStream.pipe(p);
+                        }));
                       });
                     });
                   });
-
-                  zipFile.on('close', resolve);
+                  zipFile.on('close', function() {
+                      Promise.all(files).then(function() {
+                          resolve();
+                      }).catch(function(e) {
+                          reject(e);
+                      });
+                  });
                 });
+
 
               })
             })
