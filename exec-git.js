@@ -1,4 +1,4 @@
-var Promise = require('rsvp').Promise;
+var Promise = require('bluebird').Promise;
 var exec = require('child_process').exec;
 var os = require('os');
 
