@@ -282,8 +282,7 @@ GithubLocation.configure = function(config, ui) {
   });
 };
 
-// regular expression to verify package names
-GithubLocation.packageFormat = /^[^\/]+\/[^\/]+/;
+GithubLocation.packageNameFormats = ['*/*'];
 
 GithubLocation.prototype = {
 
@@ -569,9 +568,9 @@ GithubLocation.prototype = {
   },
 
   // check if the main entry point exists. If not, try the bower.json main.
-  build: function(pjson, dir) {
-    var main = pjson.main || '';
-    var libDir = pjson.directories && (pjson.directories.dist || pjson.directories.lib) || '.';
+  processPackage: function(packageConfig, packageName, dir) {
+    var main = packageConfig.main || '';
+    var libDir = packageConfig.directories && (packageConfig.directories.dist || packageConfig.directories.lib) || '.';
 
     if (main instanceof Array)
       main = main[0];
@@ -622,7 +621,7 @@ GithubLocation.prototype = {
       }, function() {})
       .then(function(hasBowerMain) {
         if (hasBowerMain)
-          return hasBrowserMain;
+          return hasBowerMain;
 
         main = 'index';
         return checkMain(main, libDir);
