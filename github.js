@@ -747,20 +747,22 @@ GithubLocation.prototype = {
           var tagName = (releases[i].tag_name || '').trim();
 
           if (tagName == version) {
-            var firstAsset = releases[i].assets[0];
+            var firstAsset = releases[i].assets.filter(function(asset) {
+              if (asset.name.substr(asset.name.length - 7, 7) == '.tar.gz' || asset.name.substr(asset.name.length - 4, 4) == '.tgz')
+                asset.fileType = 'tar';
+              else if (asset.name.substr(asset.name.length - 4, 4) == '.zip')
+                asset.fileType = 'zip';
+              return !!asset.fileType;
+            })
+            .sort(function(asset) {
+              // src.zip comes after file.zip
+              return asset.name.indexOf('src') == -1 ? -1 : 1;
+            })[0];
+            
             if (!firstAsset)
               return false;
 
-            var assetType;
-
-            if (firstAsset.name.substr(firstAsset.name.length - 7, 7) == '.tar.gz' || firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.tgz')
-              assetType = 'tar';
-            else if (firstAsset.name.substr(firstAsset.name.length - 4, 4) == '.zip')
-              assetType = 'zip';
-            else
-              return false;
-
-            return { url: firstAsset.url, type: assetType };
+            return { url: firstAsset.url, type: firstAsset.fileType };
           }
         }
         return false;
