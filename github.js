@@ -503,8 +503,8 @@ GithubLocation.prototype = {
           return depName;
 
         if (depName.indexOf('@') != -1) {
-          depName = depName.substr(0, depName.indexOf('@'));
           depVersion = depName.substr(depName.indexOf('@') + 1);
+          depName = depName.substr(0, depName.indexOf('@'));
         }
         else {
           depVersion = depName;
@@ -514,7 +514,7 @@ GithubLocation.prototype = {
         if (depName.split('/').length == 1)
           return 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
 
-        return depName;
+        return depName + '@' + depVersion;
       }
     }
     return packageConfig;
