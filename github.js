@@ -488,6 +488,11 @@ GithubLocation.prototype = {
       }
     }
 
+    if (packageConfig.directories && packageConfig.directories.lib && !packageConfig.directories.dist) {
+      packageConfig.directories.dist = packageConfig.directories.lib;
+      this.ui.log('warn', 'Package `' + packageName + '` has a %directories.lib% override configuration which will work, but is deprecated for %directories.dist% in future jspm versions.\n');
+    }
+
     // on GitHub, single package names ('jquery') are from jspm registry
     // double package names ('components/jquery') are from github registry
     if (!packageConfig.registry || packageConfig.registry == 'github') {
