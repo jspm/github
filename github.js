@@ -645,7 +645,7 @@ GithubLocation.prototype = {
     })
     .then(function(hasMain) {
       if (hasMain)
-        packageConfig.main = main;
+        packageConfig.main = main.replace(/\\/g, '/');
       return packageConfig;
     });
   }
