@@ -52,9 +52,20 @@ function encodeCredentials(auth) {
 }
 function decodeCredentials(str) {
   var auth = new Buffer(str, 'base64').toString('ascii').split(':');
+
+  var username, password;
+  try {
+    username = decodeURIComponent(auth[0]);
+    password = decodeURIComponent(auth[1]);
+  }
+  catch(e) {
+    username = auth[0];
+    password = auth[1];
+  }
+
   return {
-    username: decodeURIComponent(auth[0]),
-    password: decodeURIComponent(auth[1])
+    username: username,
+    password: password
   };
 }
 
