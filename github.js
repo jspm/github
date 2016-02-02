@@ -46,12 +46,13 @@ function createRemoteStrings(auth, hostname) {
 
 // avoid storing passwords as plain text in config
 function encodeCredentials(auth) {
-  return new Buffer(encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password)).toString('base64');
+  return new Buffer(auth.username + ':' + auth.password).toString('base64');
 }
 function decodeCredentials(str) {
-  var auth = new Buffer(str, 'base64').toString('ascii').split(':');
+  var auth = new Buffer(str, 'base64').toString('utf8').split(':');
 
   var username, password;
+
   try {
     username = decodeURIComponent(auth[0]);
     password = decodeURIComponent(auth[1]);
