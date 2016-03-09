@@ -581,7 +581,7 @@ GithubLocation.prototype = {
 
   // check if the main entry point exists. If not, try the bower.json main.
   processPackage: function(packageConfig, packageName, dir) {
-    var main = packageConfig.main || '';
+    var main = packageConfig.main || dir.split('/').pop().split('@').slice(0, -1).join('@') + (dir.substr(dir.length - 3, 3) != '.js' ? '.js' : '');
     var libDir = packageConfig.directories && (packageConfig.directories.dist || packageConfig.directories.lib) || '.';
 
     if (main instanceof Array)
