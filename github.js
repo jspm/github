@@ -465,11 +465,14 @@ GithubLocation.prototype = {
 
     var self = this;
 
-    if ((packageConfig.dependencies || packageConfig.peerDependencies) && !packageConfig.registry && (!packageConfig.jspm || !(packageConfig.jspm.dependencies || packageConfig.jspm.peerDependencies))) {
+    if ((packageConfig.dependencies || packageConfig.peerDependencies || packageConfig.optionalDependencies) && 
+        !packageConfig.registry && (!packageConfig.jspm || !(packageConfig.jspm.dependencies || packageConfig.jspm.peerDependencies || packageConfig.jspm.optionalDependencies))) {
       var hasDependencies = false;
       for (var p in packageConfig.dependencies)
         hasDependencies = true;
       for (var p in packageConfig.peerDependencies)
+        hasDependencies = true;
+      for (var p in packageConfig.optionalDependencies)
         hasDependencies = true;
 
       if (packageName && hasDependencies) {
@@ -491,12 +494,14 @@ GithubLocation.prototype = {
         if (noDepsMsg) {
           delete packageConfig.dependencies;
           delete packageConfig.peerDependencies;
+          delete packageConfig.optionalDependencies;
           this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set.\n' + noDepsMsg + '\n');
         }
       }
       else {
         delete packageConfig.dependencies;
         delete packageConfig.peerDependencies;
+        delete packageConfig.optionalDependencies;
       }
     }
 
@@ -507,6 +512,8 @@ GithubLocation.prototype = {
         packageConfig.dependencies[d] = convertDependency(d, packageConfig.dependencies[d]);
       for (var d in packageConfig.peerDependencies)
         packageConfig.peerDependencies[d] = convertDependency(d, packageConfig.peerDependencies[d]);
+      for (var d in packageConfig.optionalDependencies)
+        packageConfig.optionalDependencies[d] = convertDependency(d, packageConfig.optionalDependencies[d]);
 
       function convertDependency(d, depName) {
         var depVersion;
