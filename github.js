@@ -418,7 +418,7 @@ GithubLocation.prototype = {
       qs: {
         ref: version
       },
-      strictSSL: this.strictSSL
+      strictSSL: this.defaultRequestOptions.strictSSL
     }).then(function(res) {
       // API auth failure warnings
       function apiFailWarn(reason, showAuthCommand) {
@@ -554,7 +554,7 @@ GithubLocation.prototype = {
       request({
         uri: remoteString + repo + '/archive/' + version + '.tar.gz',
         headers: { 'accept': 'application/octet-stream' },
-        strictSSL: self.strictSSL
+        strictSSL: self.defaultRequestOptions.strictSSL
       })
       .on('response', function(pkgRes) {
         if (pkgRes.statusCode != 200)
