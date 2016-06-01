@@ -582,7 +582,11 @@ GithubLocation.prototype = {
         pkgRes.resume();
 
       })
-      .on('error', reject);
+      .on('error', function(err) {
+        if (err.code == 'ECONNRESET')
+          err.retriable = true;
+        throw err;
+      });
     });
   },
 
