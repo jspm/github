@@ -4,8 +4,8 @@ github = new github({
   baseDir: '.',
   log: true,
   tmpDir: '.',
-  username: '',
-  password: ''
+  auth: '',
+  token: ''
 });
 
 github.lookup('angular/bower-angular')

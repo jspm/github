@@ -5,13 +5,11 @@ var rimraf = require('rimraf');
 var request = require('request');
 var expandTilde = require('expand-tilde');
 
-var Promise = require('rsvp').Promise;
-var asp = require('rsvp').denodeify;
+var Promise = require('bluebird');
+var asp = require('bluebird').Promise.promisify;
 
 var tar = require('tar');
 var zlib = require('zlib');
-
-var yauzl = require('yauzl');
 
 var semver = require('semver');
 
@@ -33,10 +31,11 @@ catch(e) {}
 var execGit = require('./exec-git');
 
 function createRemoteStrings(auth, hostname) {
-  var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
+  var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   hostname = hostname || 'github.com';
 
   this.remoteString = 'https://' + authString + hostname + '/';
+  this.authSuffix = auth.token ? '?access_token=' + auth.token : '';
 
   if (hostname == 'github.com')
     this.apiRemoteString = 'https://' + authString + 'api.github.com/';
@@ -46,14 +45,11 @@ function createRemoteStrings(auth, hostname) {
     this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/';
 }
 
-// avoid storing passwords as plain text in config
-function encodeCredentials(auth) {
-  return new Buffer(encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password)).toString('base64');
-}
 function decodeCredentials(str) {
-  var auth = new Buffer(str, 'base64').toString('ascii').split(':');
+  var auth = new Buffer(str, 'base64').toString('utf8').split(':');
 
   var username, password;
+
   try {
     username = decodeURIComponent(auth[0]);
     password = decodeURIComponent(auth[1]);
@@ -81,6 +77,10 @@ function readNetrc(hostname) {
   }
 }
 
+function isGithubToken(token) {
+  return token.match(/[0-9a-f]{40}/);
+}
+
 var GithubLocation = function(options, ui) {
 
   // ensure git is installed
@@ -98,19 +98,15 @@ var GithubLocation = function(options, ui) {
   this.versionString = options.versionString + '.1';
 
   // Give the environment precedence over options object
-  if(process.env.JSPM_GITHUB_AUTH_TOKEN) {
-    options.auth = process.env.JSPM_GITHUB_AUTH_TOKEN;
-  } else if (options.username && !options.auth) {
-    options.auth = encodeCredentials(options);
-    // NB deprecate old auth eventually
-    // delete options.username;
-    // delete options.password;
-  }
+  var auth = process.env.JSPM_GITHUB_AUTH_TOKEN || options.auth;
 
-  if (typeof options.auth == 'string') {
-    this.auth = decodeCredentials(options.auth);
-  }
-  else {
+  if (auth) {
+    if (isGithubToken(auth)) {
+      this.auth = { token: auth };
+    } else {
+      this.auth = decodeCredentials(auth);
+    }
+  } else {
     this.auth = readNetrc(options.hostname);
   }
 
@@ -148,7 +144,7 @@ var GithubLocation = function(options, ui) {
 
   this.remote = options.remote;
 
-  createRemoteStrings.call(this, this.auth, options.hostname);
+  createRemoteStrings.call(this, this.auth || {}, options.hostname);
 };
 
 function clearDir(dir) {
@@ -199,20 +195,14 @@ function configureCredentials(config, ui) {
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%. Ensure it has `public_repo` scope access.');
-    return ui.input('Enter your GitHub username');
+    ui.log('info', 'You can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
+    return ui.input('Enter your GitHub access token');
   })
-  .then(function(username) {
-    auth.username = username;
-    if (auth.username)
-      return ui.input('Enter your GitHub password or access token', null, true);
-  })
-  .then(function(password) {
-    auth.password = password;
-    if (!auth.username)
-      return false;
-
-    return ui.confirm('Would you like to test these credentials?', true);
+  .then(function(token) {
+    auth.token = token;
+    if (auth.token) {
+      return ui.confirm('Would you like to test these credentials?', true);
+    }
   })
   .then(function(test) {
     if (!test)
@@ -224,7 +214,7 @@ function configureCredentials(config, ui) {
       createRemoteStrings.call(remotes, auth, config.hostname);
 
       return asp(request)({
-        uri: remotes.apiRemoteString + 'user',
+        uri: remotes.apiRemoteString + 'user' + remotes.authSuffix,
         headers: {
           'User-Agent': 'jspm',
           'Accept': 'application/vnd.github.v3+json'
@@ -235,7 +225,7 @@ function configureCredentials(config, ui) {
     })
     .then(function(res) {
       if (res.statusCode == 401) {
-        ui.log('warn', 'Provided GitHub credentials are not authorized, try re-entering your password or access token.');
+        ui.log('warn', 'Provided GitHub credentials are not authorized, try re-entering your access token.');
       }
       else if (res.statusCode != 200) {
         ui.log('warn', 'Invalid response code, %' + res.statusCode + '%');
@@ -254,40 +244,16 @@ function configureCredentials(config, ui) {
       .then(function(redo) {
         if (redo)
           return configureCredentials(config, ui);
-        return encodeCredentials(auth);
+        return auth.token;
       });
-    else if (auth.username)
-      return encodeCredentials(auth);
+    else if (auth.token)
+      return auth.token;
     else
       return null;
   });
 }
 
-function checkRateLimit(headers) {
-  if (headers.status.match(/^401/))
-    throw 'Unauthorized response for GitHub API.\n' +
-      'Use %jspm registry config github% to reconfigure the credentials, or update them in your ~/.netrc file.';
-  if (headers.status.match(/^406/))
-    throw 'Unauthorized response for GitHub API.\n' +
-      'If using an access token ensure it has public_repo access.\n' +
-      'Use %jspm registry config github% to configure the credentials, or add them to your ~/.netrc file.';
-
-  if (headers['x-ratelimit-remaining'] != '0')
-    return;
-
-  var remaining = (headers['x-ratelimit-reset'] * 1000 - new Date(headers.date).getTime()) / 60000;
-
-  if (this.auth)
-    return Promise.reject('\nGitHub rate limit reached, with authentication enabled.' +
-        '\nThe rate limit will reset in `' + Math.round(remaining) + ' minutes`.');
-
-  var err = new Error('GitHub rate limit reached.');
-  err.config = true;
-  err.hideStack = true;
-
-  return Promise.reject(err);
-}
-
+var apiWarned = false;
 
 // static configuration function
 GithubLocation.configure = function(config, ui) {
@@ -319,8 +285,7 @@ GithubLocation.configure = function(config, ui) {
   });
 };
 
-// regular expression to verify package names
-GithubLocation.packageFormat = /^[^\/]+\/[^\/]+/;
+GithubLocation.packageNameFormats = ['*/*'];
 
 GithubLocation.prototype = {
 
@@ -328,6 +293,7 @@ GithubLocation.prototype = {
   locate: function(repo) {
     var self = this;
     var remoteString = this.remoteString;
+    var authSuffix = this.authSuffix;
 
     if (repo.split('/').length !== 2)
       throw "GitHub packages must be of the form `owner/repo`.";
@@ -335,7 +301,7 @@ GithubLocation.prototype = {
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request(extend({
-        uri: remoteString + repo,
+        uri: remoteString + repo + authSuffix,
         headers: {
           'User-Agent': 'jspm'
         },
@@ -378,8 +344,7 @@ GithubLocation.prototype = {
       execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
           if (err.toString().indexOf('not found') == -1) {
-            // dont show plain text passwords in error
-            var error = new Error(stderr.toString().replace(remoteString, ''));
+            var error = new Error(stderr);
             error.hideStack = true;
             error.retriable = true;
             reject(error);
@@ -432,31 +397,48 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    return asp(request)(extend({
-      uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
+    var self = this;
+    var ui = this.ui;
+
+    return asp(request)({
+      uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json' + this.authSuffix,
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3.raw'
       },
       qs: {
         ref: version
-      }
-    }, this.defaultRequestOptions
-    )).then(function(res) {
-      var rateLimitResponse = checkRateLimit.call(this, res.headers);
-      if (rateLimitResponse)
-        return rateLimitResponse;
+      },
+      strictSSL: this.defaultRequestOptions.strictSSL
+    }).then(function(res) {
+      // API auth failure warnings
+      function apiFailWarn(reason, showAuthCommand) {
+        if (apiWarned)
+          return;
 
-      if (res.statusCode == 404) {
-        // it is quite valid for a repo not to have a package.json
-        return {};
+        ui.log('warn', 'Unable to use the GitHub API to speed up dependency downloads due to ' + reason
+            + (showAuthCommand ? '\nTo resolve use %jspm registry config github% to configure the credentials, or update them in your ~/.netrc file.' : ''));
+        apiWarned = true;
       }
-
+      
+      if (res.headers.status.match(/^401/))
+        return apiFailWarn('lack of authorization', true);
+      if (res.headers.status.match(/^406/))
+        return apiFailWarn('insufficient permissions. Ensure you have public_repo access.');
+      if (res.headers['x-ratelimit-remaining'] == '0') {
+        if (self.auth)
+          return apiFailWarn('the rate limit being reached, which will be reset in `' + 
+              Math.round((res.headers['x-ratelimit-reset'] * 1000 - new Date(res.headers.date).getTime()) / 60000) + ' minutes`.');
+        return apiFailWarn('the rate limit being reached.', true);
+      }
       if (res.statusCode != 200)
-        throw 'Unable to check repo package.json for release, status code ' + res.statusCode;
+        return apiFailWarn('invalid response code ' + res.statusCode + '.');
+
+      // it is quite valid for a repo not to have a package.json
+      if (res.statusCode == 404)
+        return {};
 
       var packageJSON;
-
       try {
         packageJSON = JSON.parse(res.body);
       }
@@ -468,19 +450,24 @@ GithubLocation.prototype = {
     });
   },
 
-  processPackageConfig: function(pjson, packageName) {
-    if (!pjson.jspm || !pjson.jspm.files)
-      delete pjson.files;
+  processPackageConfig: function(packageConfig, packageName) {
+    if (!packageConfig.jspm || !packageConfig.jspm.files)
+      delete packageConfig.files;
 
     var self = this;
 
-    if (pjson.dependencies && !pjson.registry && (!pjson.jspm || !pjson.jspm.dependencies)) {
+    if ((packageConfig.dependencies || packageConfig.peerDependencies || packageConfig.optionalDependencies) && 
+        !packageConfig.registry && (!packageConfig.jspm || !(packageConfig.jspm.dependencies || packageConfig.jspm.peerDependencies || packageConfig.jspm.optionalDependencies))) {
       var hasDependencies = false;
-      for (var p in pjson.dependencies)
+      for (var p in packageConfig.dependencies)
+        hasDependencies = true;
+      for (var p in packageConfig.peerDependencies)
+        hasDependencies = true;
+      for (var p in packageConfig.optionalDependencies)
         hasDependencies = true;
 
       if (packageName && hasDependencies) {
-        var looksLikeNpm = pjson.name && pjson.version && (pjson.description || pjson.repository || pjson.author || pjson.license || pjson.scripts);
+        var looksLikeNpm = packageConfig.name && packageConfig.version && (packageConfig.description || packageConfig.repository || packageConfig.author || packageConfig.license || packageConfig.scripts);
         var isSemver = semver.valid(packageName.split('@').pop());
         var noDepsMsg;
 
@@ -489,35 +476,45 @@ GithubLocation.prototype = {
           if (!isSemver)
             noDepsMsg = 'To install this package as it would work on npm, install with a registry override via %jspm install ' + packageName + ' -o "{registry:\'npm\'}"%.'
           else
-            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + pjson.name + '@^' + pjson.version + '% instead.';
+            noDepsMsg = 'If the dependencies aren\'t needed ignore this message. Alternatively set a `registry` or `dependencies` override or use the npm registry version at %jspm install npm:' + packageConfig.name + '@^' + packageConfig.version + '% instead.';
         }
         else {
           noDepsMsg = 'If this is your own package, add `"registry": "jspm"` to the package.json to ensure the dependencies are installed.'
         }
 
         if (noDepsMsg) {
-          delete pjson.dependencies;
+          delete packageConfig.dependencies;
+          delete packageConfig.peerDependencies;
+          delete packageConfig.optionalDependencies;
           this.ui.log('warn', '`' + packageName + '` dependency installs skipped as it\'s a GitHub package with no registry property set.\n' + noDepsMsg + '\n');
         }
       }
       else {
-        delete pjson.dependencies;
+        delete packageConfig.dependencies;
+        delete packageConfig.peerDependencies;
+        delete packageConfig.optionalDependencies;
       }
     }
 
     // on GitHub, single package names ('jquery') are from jspm registry
     // double package names ('components/jquery') are from github registry
-    if (!pjson.registry) {
-      for (var d in pjson.dependencies) {
-        var depName = pjson.dependencies[d];
+    if (!packageConfig.registry || packageConfig.registry == 'github') {
+      for (var d in packageConfig.dependencies)
+        packageConfig.dependencies[d] = convertDependency(d, packageConfig.dependencies[d]);
+      for (var d in packageConfig.peerDependencies)
+        packageConfig.peerDependencies[d] = convertDependency(d, packageConfig.peerDependencies[d]);
+      for (var d in packageConfig.optionalDependencies)
+        packageConfig.optionalDependencies[d] = convertDependency(d, packageConfig.optionalDependencies[d]);
+
+      function convertDependency(d, depName) {
         var depVersion;
 
         if (depName.indexOf(':') != -1)
-          continue;
+          return depName;
 
         if (depName.indexOf('@') != -1) {
-          depName = depName.substr(0, depName.indexOf('@'));
           depVersion = depName.substr(depName.indexOf('@') + 1);
+          depName = depName.substr(0, depName.indexOf('@'));
         }
         else {
           depVersion = depName;
@@ -525,10 +522,12 @@ GithubLocation.prototype = {
         }
 
         if (depName.split('/').length == 1)
-          pjson.dependencies[d] = 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
+          return 'jspm:' + depName + (depVersion && depVersion !== true ? '@' + depVersion : '');
+
+        return depName + '@' + depVersion;
       }
     }
-    return pjson;
+    return packageConfig;
   },
 
   download: function(repo, version, hash, meta, outDir) {
@@ -538,253 +537,55 @@ GithubLocation.prototype = {
     var execOpt = this.execOpt;
     var max_repo_size = this.max_repo_size;
     var remoteString = this.remoteString;
+    var authSuffix = this.authSuffix;
 
     var self = this;
 
-    return this.checkReleases(repo, version)
-    .then(function(release) {
-      if (!release)
-        return true;
-
-      // Download from the release archive
-      return new Promise(function(resolve, reject) {
-        var inPipe;
-
-        if (release.type == 'tar') {
-          (inPipe = zlib.createGunzip())
-          .pipe(tar.Extract({
-            path: outDir, 
-            strip: 0,
-            filter: function() {
-              return !this.type.match(/^.*Link$/);
-            }
-          }))
-          .on('end', function() {
-            resolve();
-          })
-          .on('error', reject);
-        }
-        else if (release.type == 'zip') {
-          var tmpDir = path.resolve(execOpt.cwd, 'release-' + repo.replace('/', '#') + '-' + version);
-          var tmpFile = tmpDir + '.' + release.type;
-
-          var repoDir;
-
-          inPipe = fs.createWriteStream(tmpFile)
-          .on('finish', function() {
-            return clearDir(tmpDir)
-            .then(function() {
-              return asp(fs.mkdir(tmpDir));
-            })
-            .then(function() {
-              return new Promise(function(resolve, reject) {
-                var files = [];
-                yauzl.open(tmpFile, function(err, zipFile) {
-                  if (err)
-                    return reject(err);
-
-                  zipFile.on('entry', function(entry) {
-                    var fileName = tmpDir + '/' + entry.fileName;
-
-                    if (fileName[fileName.length - 1] == '/')
-                      return;
-
-                    zipFile.openReadStream(entry, function(err, readStream) {
-                      if (err)
-                        return reject(err);
-                      mkdirp(path.dirname(fileName), function(err) {
-                        if (err)
-                          return reject(err);
-                        files.push(new Promise(function(_resolve, _reject) {
-                            var p = fs.createWriteStream(fileName).on("close", function(err) {
-                                if (err) _reject(err);
-                                _resolve();
-                            });
-                            readStream.pipe(p);
-                        }));
-                      });
-                    });
-                  });
-                  zipFile.on('close', function() {
-                      Promise.all(files).then(function() {
-                          resolve();
-                      }).catch(function(e) {
-                          reject(e);
-                      });
-                  });
-                });
-
-
-              })
-            })
-            .then(function() {
-             return checkStripDir(tmpDir);
-            })
-            .then(function(_repoDir) {
-              repoDir = _repoDir;
-              return asp(fs.rmdir)(outDir);
-            })
-            .then(function() {
-              return asp(fs.rename)(repoDir, outDir);
-            })
-            .then(function() {
-              return asp(fs.unlink)(tmpFile);
-            })
-            .then(resolve, reject);
-          })
-          .on('error', reject);
-        }
-        else {
-          throw 'GitHub release found, but no archive present.';
-        }
-
-        // now that the inPipe is ready, do the request
-        request(extend({
-          uri: release.url,
-          headers: {
-            'accept': 'application/octet-stream',
-            'user-agent': 'jspm'
-          },
-          followRedirect: false,
-          auth: self.auth && {
-            user: self.auth.username,
-            pass: self.auth.password
-          }
-        }, self.defaultRequestOptions
-        )).on('response', function(archiveRes) {
-          var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
-          if (rateLimitResponse)
-            return rateLimitResponse.then(resolve, reject);
-
-          if (archiveRes.statusCode != 302)
-            return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
-
-          request(extend({
-            uri: archiveRes.headers.location, headers: {
-              'accept': 'application/octet-stream',
-              'user-agent': 'jspm'
-            }
-          }, self.defaultRequestOptions
-          ))
-          .on('response', function(archiveRes) {
-
-            if (max_repo_size && archiveRes.headers['content-length'] > max_repo_size)
-              return reject('Response too large.');
-
-            archiveRes.pause();
-
-            archiveRes.pipe(inPipe);
-
-            archiveRes.on('error', reject);
-
-            archiveRes.resume();
-
-          })
-          .on('error', reject);
-        })
-        .on('error', reject);
-      });
-    })
-    .then(function(git) {
-      if (!git)
-        return;
-
-      // Download from the git archive
-      return new Promise(function(resolve, reject) {
-        request(extend({
-          uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' }
-        }, self.defaultRequestOptions
-        ))
-        .on('response', function(pkgRes) {
-          if (pkgRes.statusCode != 200)
-            return reject('Bad response code ' + pkgRes.statusCode);
-
-          if (max_repo_size && pkgRes.headers['content-length'] > max_repo_size)
-            return reject('Response too large.');
-
-          pkgRes.pause();
-
-          var gzip = zlib.createGunzip();
-
-          pkgRes
-          .pipe(gzip)
-          .pipe(tar.Extract({
-            path: outDir,
-            strip: 1,
-            filter: function() {
-              return !this.type.match(/^.*Link$/);
-            }
-          }))
-          .on('error', reject)
-          .on('end', resolve);
-
-          pkgRes.resume();
-
-        })
-        .on('error', reject);
-      });
-    });
-  },
-
-  checkReleases: function(repo, version) {
-    // NB cache this on disk with etags
-    var reqOptions = extend({
-      uri: this.apiRemoteString + 'repos/' + repo + '/releases',
-      headers: {
-        'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.v3+json'
-      },
-      followRedirect: false
-    }, this.defaultRequestOptions);
-
-    return asp(request)(reqOptions)
-    .then(function(res) {
-      var rateLimitResponse = checkRateLimit.call(this, res.headers);
-      if (rateLimitResponse)
-        return rateLimitResponse;
-      return Promise.resolve()
-      .then(function() {
-        try {
-          return JSON.parse(res.body);
-        }
-        catch(e) {
-          throw 'Unable to parse GitHub API response';
-        }
+    // Download from the git archive
+    return new Promise(function(resolve, reject) {
+      request({
+        uri: remoteString + repo + '/archive/' + version + '.tar.gz' + authSuffix,
+        headers: { 'accept': 'application/octet-stream' },
+        strictSSL: self.defaultRequestOptions.strictSSL
       })
-      .then(function(releases) {
-        // run through releases list to see if we have this version tag
-        for (var i = 0; i < releases.length; i++) {
-          var tagName = (releases[i].tag_name || '').trim();
+      .on('response', function(pkgRes) {
+        if (pkgRes.statusCode != 200)
+          return reject('Bad response code ' + pkgRes.statusCode);
 
-          if (tagName == version) {
-            var firstAsset = releases[i].assets.filter(function(asset) {
-              if (asset.name.substr(asset.name.length - 7, 7) == '.tar.gz' || asset.name.substr(asset.name.length - 4, 4) == '.tgz')
-                asset.fileType = 'tar';
-              else if (asset.name.substr(asset.name.length - 4, 4) == '.zip')
-                asset.fileType = 'zip';
-              return !!asset.fileType;
-            })
-            .sort(function(asset) {
-              // src.zip comes after file.zip
-              return asset.name.indexOf('src') == -1 ? -1 : 1;
-            })[0];
-            
-            if (!firstAsset)
-              return false;
+        if (max_repo_size && pkgRes.headers['content-length'] > max_repo_size)
+          return reject('Response too large.');
 
-            return { url: firstAsset.url, type: firstAsset.fileType };
+        pkgRes.pause();
+
+        var gzip = zlib.createGunzip();
+
+        pkgRes
+        .pipe(gzip)
+        .pipe(tar.Extract({
+          path: outDir,
+          strip: 1, 
+          filter: function() {
+            return !this.type.match(/^.*Link$/);
           }
-        }
-        return false;
+        }))
+        .on('error', reject)
+        .on('end', resolve);
+
+        pkgRes.resume();
+
+      })
+      .on('error', function(err) {
+        if (err.code == 'ECONNRESET')
+          err.retriable = true;
+        throw err;
       });
     });
   },
 
   // check if the main entry point exists. If not, try the bower.json main.
-  build: function(pjson, dir) {
-    var main = pjson.main || '';
-    var libDir = pjson.directories && (pjson.directories.dist || pjson.directories.lib) || '.';
+  processPackage: function(packageConfig, packageName, dir) {
+    var main = packageConfig.main || dir.split('/').pop().split('@').slice(0, -1).join('@') + (dir.substr(dir.length - 3, 3) != '.js' ? '.js' : '');
+    var libDir = packageConfig.directories && (packageConfig.directories.dist || packageConfig.directories.lib) || '.';
 
     if (main instanceof Array)
       main = main[0];
@@ -816,7 +617,7 @@ GithubLocation.prototype = {
     return checkMain(main, libDir)
     .then(function(hasMain) {
       if (hasMain)
-        return;
+        return hasMain;
 
       return asp(fs.readFile)(path.resolve(dir, 'bower.json'))
       .then(function(bowerJson) {
@@ -834,11 +635,17 @@ GithubLocation.prototype = {
         return checkMain(main);
       }, function() {})
       .then(function(hasBowerMain) {
-        if (!hasBowerMain)
-          return;
+        if (hasBowerMain)
+          return hasBowerMain;
 
-        pjson.main = main;
+        main = 'index';
+        return checkMain(main, libDir);
       });
+    })
+    .then(function(hasMain) {
+      if (hasMain)
+        packageConfig.main = main.replace(/\\/g, '/');
+      return packageConfig;
     });
   }
 
