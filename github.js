@@ -33,10 +33,11 @@ catch(e) {}
 var execGit = require('./exec-git');
 
 function createRemoteStrings(auth, hostname) {
-  var authString = auth ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
+  var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   hostname = hostname || 'github.com';
 
   this.remoteString = 'https://' + authString + hostname + '/';
+  this.authSuffix = auth.token ? '?access_token=' + auth.token : '';
 
   if (hostname == 'github.com')
     this.apiRemoteString = 'https://' + authString + 'api.github.com/';
@@ -46,10 +47,6 @@ function createRemoteStrings(auth, hostname) {
     this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/';
 }
 
-// avoid storing passwords as plain text in config
-function encodeCredentials(auth) {
-  return new Buffer(encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password)).toString('base64');
-}
 function decodeCredentials(str) {
   var auth = new Buffer(str, 'base64').toString('ascii').split(':');
 
@@ -81,6 +78,10 @@ function readNetrc(hostname) {
   }
 }
 
+function isGithubToken(token) {
+  return token.match(/[0-9a-f]{40}/);
+}
+
 var GithubLocation = function(options, ui) {
 
   // ensure git is installed
@@ -98,19 +99,15 @@ var GithubLocation = function(options, ui) {
   this.versionString = options.versionString + '.1';
 
   // Give the environment precedence over options object
-  if(process.env.JSPM_GITHUB_AUTH_TOKEN) {
-    options.auth = process.env.JSPM_GITHUB_AUTH_TOKEN;
-  } else if (options.username && !options.auth) {
-    options.auth = encodeCredentials(options);
-    // NB deprecate old auth eventually
-    // delete options.username;
-    // delete options.password;
-  }
+  var auth = process.env.JSPM_GITHUB_AUTH_TOKEN || options.auth;
 
-  if (typeof options.auth == 'string') {
-    this.auth = decodeCredentials(options.auth);
-  }
-  else {
+  if (auth) {
+    if (isGithubToken(auth)) {
+      this.auth = { token: auth };
+    } else {
+      this.auth = decodeCredentials(auth);
+    }
+  } else {
     this.auth = readNetrc(options.hostname);
   }
 
@@ -148,7 +145,7 @@ var GithubLocation = function(options, ui) {
 
   this.remote = options.remote;
 
-  createRemoteStrings.call(this, this.auth, options.hostname);
+  createRemoteStrings.call(this, this.auth || {}, options.hostname);
 };
 
 function clearDir(dir) {
@@ -199,20 +196,27 @@ function configureCredentials(config, ui) {
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%. Ensure it has `public_repo` scope access.');
-    return ui.input('Enter your GitHub username');
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
+    return ui.input('Enter your GitHub username or access token');
   })
-  .then(function(username) {
-    auth.username = username;
-    if (auth.username)
-      return ui.input('Enter your GitHub password or access token', null, true);
+  .then(function(entered) {
+    if (!entered) {
+      return false;
+    } else if (isGithubToken(entered)) {
+      auth.token = entered;
+    } else {
+      auth.username = entered;
+      return ui.input('Enter your GitHub password', null, true);
+    }
   })
   .then(function(password) {
-    auth.password = password;
-    if (!auth.username)
-      return false;
+    if (password) {
+      auth.password = password;
+    }
 
-    return ui.confirm('Would you like to test these credentials?', true);
+    if (auth.username || auth.token) {
+      return ui.confirm('Would you like to test these credentials?', true);
+    }
   })
   .then(function(test) {
     if (!test)
@@ -224,7 +228,7 @@ function configureCredentials(config, ui) {
       createRemoteStrings.call(remotes, auth, config.hostname);
 
       return asp(request)({
-        uri: remotes.apiRemoteString + 'user',
+        uri: remotes.apiRemoteString + 'user' + remotes.authSuffix,
         headers: {
           'User-Agent': 'jspm',
           'Accept': 'application/vnd.github.v3+json'
@@ -254,10 +258,10 @@ function configureCredentials(config, ui) {
       .then(function(redo) {
         if (redo)
           return configureCredentials(config, ui);
-        return encodeCredentials(auth);
+        return auth.token;
       });
-    else if (auth.username)
-      return encodeCredentials(auth);
+    else if (auth.token)
+      return auth.token;
     else
       return null;
   });
@@ -328,6 +332,7 @@ GithubLocation.prototype = {
   locate: function(repo) {
     var self = this;
     var remoteString = this.remoteString;
+    var authSuffix = this.authSuffix;
 
     if (repo.split('/').length !== 2)
       throw "GitHub packages must be of the form `owner/repo`.";
@@ -335,7 +340,7 @@ GithubLocation.prototype = {
     // request the repo to check that it isn't a redirect
     return new Promise(function(resolve, reject) {
       request(extend({
-        uri: remoteString + repo,
+        uri: remoteString + repo + authSuffix,
         headers: {
           'User-Agent': 'jspm'
         },
@@ -433,7 +438,7 @@ GithubLocation.prototype = {
       version = 'v' + version;
 
     return asp(request)(extend({
-      uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
+      uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json' + this.authSuffix,
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3.raw'
@@ -538,6 +543,7 @@ GithubLocation.prototype = {
     var execOpt = this.execOpt;
     var max_repo_size = this.max_repo_size;
     var remoteString = this.remoteString;
+    var authSuffix = this.authSuffix;
 
     var self = this;
 
@@ -640,16 +646,12 @@ GithubLocation.prototype = {
 
         // now that the inPipe is ready, do the request
         request(extend({
-          uri: release.url,
+          uri: release.url + authSuffix,
           headers: {
             'accept': 'application/octet-stream',
             'user-agent': 'jspm'
           },
           followRedirect: false,
-          auth: self.auth && {
-            user: self.auth.username,
-            pass: self.auth.password
-          }
         }, self.defaultRequestOptions
         )).on('response', function(archiveRes) {
           var rateLimitResponse = checkRateLimit.call(this, archiveRes.headers);
@@ -660,7 +662,8 @@ GithubLocation.prototype = {
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
           request(extend({
-            uri: archiveRes.headers.location, headers: {
+            uri: archiveRes.headers.location + authSuffix,
+            headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
             }
@@ -692,8 +695,10 @@ GithubLocation.prototype = {
       // Download from the git archive
       return new Promise(function(resolve, reject) {
         request(extend({
-          uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: { 'accept': 'application/octet-stream' }
+          uri: remoteString + repo + '/archive/' + version + '.tar.gz' + authSuffix,
+          headers: {
+            'accept': 'application/octet-stream'
+          },
         }, self.defaultRequestOptions
         ))
         .on('response', function(pkgRes) {
@@ -730,7 +735,7 @@ GithubLocation.prototype = {
   checkReleases: function(repo, version) {
     // NB cache this on disk with etags
     var reqOptions = extend({
-      uri: this.apiRemoteString + 'repos/' + repo + '/releases',
+      uri: this.apiRemoteString + 'repos/' + repo + '/releases' + this.authSuffix,
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
