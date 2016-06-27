@@ -196,20 +196,27 @@ function configureCredentials(config, ui) {
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%. Ensure it has `public_repo` scope access.');
-    return ui.input('Enter your GitHub username');
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
+    return ui.input('Enter your GitHub username or access token');
   })
-  .then(function(username) {
-    auth.username = username;
-    if (auth.username)
-      return ui.input('Enter your GitHub password or access token', null, true);
+  .then(function(entered) {
+    if (!entered) {
+      return false;
+    } else if (isGithubToken(entered)) {
+      auth.token = entered;
+    } else {
+      auth.username = entered;
+      return ui.input('Enter your GitHub password', null, true);
+    }
   })
   .then(function(password) {
-    auth.password = password;
-    if (!auth.username)
-      return false;
+    if (password) {
+      auth.password = password;
+    }
 
-    return ui.confirm('Would you like to test these credentials?', true);
+    if (auth.username || auth.token) {
+      return ui.confirm('Would you like to test these credentials?', true);
+    }
   })
   .then(function(test) {
     if (!test)
