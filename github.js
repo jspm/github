@@ -662,7 +662,7 @@ GithubLocation.prototype = {
             return reject('Bad response code ' + archiveRes.statusCode + '\n' + JSON.stringify(archiveRes.headers));
 
           request(extend({
-            uri: archiveRes.headers.location + authSuffix,
+            uri: archiveRes.headers.location,
             headers: {
               'accept': 'application/octet-stream',
               'user-agent': 'jspm'
