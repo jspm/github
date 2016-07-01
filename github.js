@@ -47,6 +47,10 @@ function createRemoteStrings(auth, hostname) {
     this.apiRemoteString = 'https://' + authString + hostname + '/api/v3/';
 }
 
+// avoid storing passwords as plain text in config
+function encodeCredentials(auth) {
+  return new Buffer(encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password)).toString('base64');
+}
 function decodeCredentials(str) {
   var auth = new Buffer(str, 'base64').toString('ascii').split(':');
 
@@ -102,7 +106,7 @@ var GithubLocation = function(options, ui) {
   var auth = process.env.JSPM_GITHUB_AUTH_TOKEN || options.auth;
 
   if (auth) {
-    if (isGithubToken(auth)) {
+    if (typeof auth == 'string' && isGithubToken(auth)) {
       this.auth = { token: auth };
     } else {
       this.auth = decodeCredentials(auth);
@@ -262,8 +266,10 @@ function configureCredentials(config, ui) {
       });
     else if (auth.token)
       return auth.token;
+    else if (auth.username)
+      return encodeCredentials(auth);
     else
-      return null;
+      return auth;
   });
 }
 
