@@ -4,7 +4,7 @@ var mkdirp = require('mkdirp');
 var rimraf = require('rimraf');
 var request = require('request');
 var expandTilde = require('expand-tilde');
-
+var url = require('url');
 var Promise = require('bluebird');
 var asp = require('bluebird').Promise.promisify;
 
@@ -29,6 +29,15 @@ try {
 catch(e) {}
 
 var execGit = require('./exec-git');
+
+var jsGitApi = require('nogit/lib/js-git-api');
+var jsGitNodeRequest = require('nogit/lib/js-git-node-request');
+global.btoa = function(str) {
+  return (str instanceof Buffer ? str : new Buffer(str.toString(), 'binary')).toString('base64');
+}
+var jsGitTransportHttp = require('js-git/net/transport-http')(jsGitNodeRequest);
+var jsGitfetchPackProtocol = require('js-git/net/git-fetch-pack');
+
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
@@ -340,54 +349,56 @@ GithubLocation.prototype = {
   lookup: function(repo) {
     var execOpt = this.execOpt;
     var remoteString = this.remoteString;
+
     return new Promise(function(resolve, reject) {
-      execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
-        if (err) {
-          if (err.toString().indexOf('not found') == -1) {
-            var error = new Error(stderr);
-            error.hideStack = true;
-            error.retriable = true;
-            reject(error);
-          }
-          else
-            resolve({ notfound: true });
-        }
+      var remote = remoteString + repo + '.git';
+      var parsed = url.parse(remote);
+      var auth = parsed.auth;
+      if(auth) {
+        delete parsed.auth;
+        remote = parsed.format();
+        var colon = auth.indexOf(':') ;
+        var username = colon == -1 ? auth : auth.substr(0, colon);
+        var password = colon == -1 ? '' : auth.substr(colon + 1);
+      }
 
-        versions = {};
-        var refs = stdout.split('\n');
-        for (var i = 0; i < refs.length; i++) {
-          if (!refs[i])
-            continue;
-
-          var hash = refs[i].substr(0, refs[i].indexOf('\t'));
-          var refName = refs[i].substr(hash.length + 1);
-          var version;
-          var versionObj = { hash: hash, meta: {} };
-
-          if (refName.substr(0, 11) == 'refs/heads/') {
-            version = refName.substr(11);
-            versionObj.stable = false;
-          }
-
-          else if (refName.substr(0, 10) == 'refs/tags/') {
-            if (refName.substr(refName.length - 3, 3) == '^{}')
-              version = refName.substr(10, refName.length - 13);
-            else
-              version = refName.substr(10);
-
-            if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
-              version = version.substr(1);
-              // note when we remove a "v" which versions we need to add it back to
-              // to work out the tag version again
-              versionObj.meta.vPrefix = true;
-            }
-          }
-
-          versions[version] = versionObj;
-        }
-
-        resolve({ versions: versions });
+      var remoteTransport = jsGitTransportHttp(remote, username, password);
+      var api = jsGitfetchPackProtocol(remoteTransport, reject);
+      api.take(function(err, refs) {
+        if(err) reject(err)
+        else resolve(refs);
       });
+    })
+    .then(function(refs) {
+      var versions = {};
+      for(var refName in refs) {
+        var hash = refs[refName];
+        var version;
+        var versionObj = { hash: hash, meta: {} };
+        if (refName.substr(0, 11) == 'refs/heads/') {
+          version = refName.substr(11);
+          versionObj.stable = false;
+        }
+
+        else if (refName.substr(0, 10) == 'refs/tags/') {
+          if (refName.substr(refName.length - 3, 3) == '^{}')
+            version = refName.substr(10, refName.length - 13);
+          else
+            version = refName.substr(10);
+
+          if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
+            version = version.substr(1);
+            // note when we remove a "v" which versions we need to add it back to
+            // to work out the tag version again
+            versionObj.meta.vPrefix = true;
+          }
+        } else {
+          continue;
+        }
+
+        versions[version] = versionObj;
+      }
+      return { versions: versions };
     });
   },
 
