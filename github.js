@@ -13,8 +13,6 @@ var zlib = require('zlib');
 
 var semver = require('semver');
 
-var which = require('which');
-
 function extend(dest, src) {
   for (var key in src) {
     dest[key] = src[key]
@@ -28,7 +26,7 @@ try {
 }
 catch(e) {}
 
-var execGit = require('./exec-git');
+var lsRemote = asp(require('./ls-remote'));
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
@@ -82,15 +80,6 @@ function isGithubToken(token) {
 }
 
 var GithubLocation = function(options, ui) {
-
-  // ensure git is installed
-  try {
-    which.sync('git');
-  }
-  catch(ex) {
-    throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
-  }
-
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -338,56 +327,43 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
-    var execOpt = this.execOpt;
     var remoteString = this.remoteString;
-    return new Promise(function(resolve, reject) {
-      execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
-        if (err) {
-          if (err.toString().indexOf('not found') == -1) {
-            var error = new Error(stderr);
-            error.hideStack = true;
-            error.retriable = true;
-            reject(error);
-          }
+    return lsRemote(remoteString + repo + '.git')
+    .then(function(refs) {
+      var versions = {};
+      refs.forEach(function(ref) {
+        var version;
+        var versionObj = { hash: ref.sha, meta: {} };
+        if (ref.name.substr(0, 11) == 'refs/heads/') {
+          version = ref.name.substr(11);
+          versionObj.stable = false;
+        }
+
+        else if (ref.name.substr(0, 10) == 'refs/tags/') {
+          if (ref.name.substr(ref.name.length - 3, 3) == '^{}')
+            version = ref.name.substr(10, ref.name.length - 13);
           else
-            resolve({ notfound: true });
+            version = ref.name.substr(10);
+
+          if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
+            version = version.substr(1);
+            // note when we remove a "v" which versions we need to add it back to
+            // to work out the tag version again
+            versionObj.meta.vPrefix = true;
+          }
         }
 
-        versions = {};
-        var refs = stdout.split('\n');
-        for (var i = 0; i < refs.length; i++) {
-          if (!refs[i])
-            continue;
-
-          var hash = refs[i].substr(0, refs[i].indexOf('\t'));
-          var refName = refs[i].substr(hash.length + 1);
-          var version;
-          var versionObj = { hash: hash, meta: {} };
-
-          if (refName.substr(0, 11) == 'refs/heads/') {
-            version = refName.substr(11);
-            versionObj.stable = false;
-          }
-
-          else if (refName.substr(0, 10) == 'refs/tags/') {
-            if (refName.substr(refName.length - 3, 3) == '^{}')
-              version = refName.substr(10, refName.length - 13);
-            else
-              version = refName.substr(10);
-
-            if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
-              version = version.substr(1);
-              // note when we remove a "v" which versions we need to add it back to
-              // to work out the tag version again
-              versionObj.meta.vPrefix = true;
-            }
-          }
-
-          versions[version] = versionObj;
-        }
-
-        resolve({ versions: versions });
+        versions[version] = versionObj;
       });
+
+      return { versions: versions };
+    }, function(error) {
+      // 401 does not mean authentication failure in this instance
+      if (error.statusCode && (error.statusCode == 401 || error.statusCode == 404)) return { notfound: true };
+      if (error.statusCode) error = new Error('github returned ' + error.statusCode);
+      error.retriable = true;
+      error.hideStack = true;
+      throw error;
     });
   },
 
