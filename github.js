@@ -8,7 +8,7 @@ var expandTilde = require('expand-tilde');
 var Promise = require('bluebird');
 var asp = require('bluebird').Promise.promisify;
 
-var tar = require('tar');
+var tar = require('tar-fs');
 var zlib = require('zlib');
 
 var semver = require('semver');
@@ -561,15 +561,13 @@ GithubLocation.prototype = {
 
         pkgRes
         .pipe(gzip)
-        .pipe(tar.Extract({
-          path: outDir,
-          strip: 1, 
-          filter: function() {
-            return !this.type.match(/^.*Link$/);
+        .pipe(tar.extract(outDir, {
+          strip: 1,
+          filter: function(_, header) {
+            return header.type !== 'file' && header.type !== 'directory'
           }
-        }))
-        .on('error', reject)
-        .on('end', resolve);
+        }).on('finish', resolve).on('error', reject))
+        .on('error', reject);
 
         pkgRes.resume();
 
