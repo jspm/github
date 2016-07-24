@@ -101,21 +101,9 @@ var GithubLocation = function(options, ui) {
 
   this.ui = ui;
 
-  this.execOpt = {
-    cwd: options.tmpDir,
-    timeout: options.timeout * 1000,
-    killSignal: 'SIGKILL',
-    maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
-    env: extend({}, process.env)
-  };
-
   this.defaultRequestOptions = {
     strictSSL: 'strictSSL' in options ? options.strictSSL : true
   };
-
-  if (!this.defaultRequestOptions.strictSSL) {
-    this.execOpt.env.GIT_SSL_NO_VERIFY = '1'
-  }
 
   var self = this, envMap = {
     ca: 'GIT_SSL_CAINFO',
@@ -126,7 +114,6 @@ var GithubLocation = function(options, ui) {
   ['ca', 'cert', 'key'].forEach(function(key) {
     if (key in options) {
       var path = expandTilde(options[key]);
-      self.execOpt.env[envMap[key]] = path;
       self.defaultRequestOptions[key] = fs.readFileSync(path, 'ascii');
     }
   });
@@ -510,7 +497,6 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    var execOpt = this.execOpt;
     var max_repo_size = this.max_repo_size;
     var remoteString = this.remoteString;
     var authSuffix = this.authSuffix;
