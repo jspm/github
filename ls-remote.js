@@ -1,35 +1,35 @@
 var request = require('request');
-module.exports = function(repo, cb) {
-  var opts = {
-    url: repo + '/info/refs?service=git-upload-pack',
-    encoding: null,
-    headers: { 'user-agent': 'jspm' }
-  };
+
+module.exports = function(opts, cb) {
+  opts.encoding = null;
+  opts.url += '/info/refs?service=git-upload-pack';
+
   request(opts, function(err, response, body) {
     // network errors
     if (err) return cb(err);
 
-    if (response.statusCode != 200) return cb({ statusCode: response.statusCode });
-    if (response.headers['content-type'] != 'application/x-git-upload-pack-advertisement') return cb({ statusCode: 500 });
+    if (response.statusCode != 200) return cb({ statusCode: response.statusCode, headers: response.headers });
+    // per the specification, content-type must be this
+    if (response.headers['content-type'] != 'application/x-git-upload-pack-advertisement') return cb({ statusCode: 500, headers: response.statusCode });
 
     var lines = [];
     var pos = 0;
     while (pos < body.length) {
       // read 4 bytes and parse line length in hex
-      var lineLength = parseInt(body.toString('ascii', pos, pos + 4), 16);
+      var lineLength = parseInt(body.toString('utf8', pos, pos + 4), 16);
       // if line isn't blank, read it, otherwise read the next line
       if (lineLength != 0) {
-        var line = body.toString('ascii', pos + 4, pos += lineLength);
+        var line = body.toString('utf8', pos + 4, pos += lineLength);
         lines.push(line.trim());
       } else pos += 4;
     }
 
     // verify the first line is git-upload-pack
-    if( lines.shift() != '# service=git-upload-pack') return cb({ statusCode: 500 });
+    if( lines.shift() != '# service=git-upload-pack') return cb({ statusCode: 500, headers: response.headers });
 
     // verify the second line is the HEAD
     // e.g. 21d0a9aa00806bb7f67ef5cd98c876aa20e4d803 HEAD\u0000multi_ack thin-pack [...]
-    if (lines.shift().substr(41, 4) != 'HEAD') return cb({ statusCode: 500 });
+    if (lines.shift().substr(41, 4) != 'HEAD') return cb({ statusCode: 500, headers: response.headers });
 
     // parse the remaining lines
     var refs = lines.map(function(line) {
