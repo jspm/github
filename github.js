@@ -103,6 +103,9 @@ var GithubLocation = function(options, ui) {
   this.ui = ui;
 
   this.defaultRequestOptions = {
+    headers: {
+      'User-Agent': 'jspm'
+    },
     strictSSL: 'strictSSL' in options ? options.strictSSL : true
   };
 
@@ -279,12 +282,8 @@ GithubLocation.prototype = {
     return new Promise(function(resolve, reject) {
       request(extend({
         uri: remoteString + repo + authSuffix,
-        headers: {
-          'User-Agent': 'jspm'
-        },
         followRedirect: false
-      }, self.defaultRequestOptions
-      ))
+      }, self.defaultRequestOptions))
       .on('response', function(res) {
         // redirect
         if (res.statusCode == 301)
@@ -315,8 +314,11 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
+    var self = this;
     var remoteString = this.remoteString;
-    return lsRemote(remoteString + repo + '.git')
+    return lsRemote(extend({
+      url: remoteString + repo + '.git'
+    }, self.defaultRequestOptions))
     .then(function(refs) {
       var versions = {};
       refs.forEach(function(ref) {
@@ -348,7 +350,10 @@ GithubLocation.prototype = {
     }, function(error) {
       // 401 does not mean authentication failure in this instance
       if (error.statusCode && (error.statusCode == 401 || error.statusCode == 404)) return { notfound: true };
-      if (error.statusCode) error = new Error('github returned ' + error.statusCode);
+      if (error.statusCode) error = new Error('Invalid status code when fetching versions: ' + error.statusCode);
+      else if(typeof error == 'string') {
+        error = new Error(error);
+      }
       error.retriable = true;
       error.hideStack = true;
       throw error;
@@ -364,17 +369,16 @@ GithubLocation.prototype = {
     var self = this;
     var ui = this.ui;
 
-    return asp(request)({
+    return asp(request)(extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json' + this.authSuffix,
       headers: {
-        'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3.raw'
       },
       qs: {
         ref: version
-      },
-      strictSSL: this.defaultRequestOptions.strictSSL
-    }).then(function(res) {
+      }
+    }, self.defaultRequestOptions))
+    .then(function(res) {
       // API auth failure warnings
       function apiFailWarn(reason, showAuthCommand) {
         if (apiWarned)
@@ -506,11 +510,10 @@ GithubLocation.prototype = {
 
     // Download from the git archive
     return new Promise(function(resolve, reject) {
-      request({
+      request(extend({
         uri: remoteString + repo + '/archive/' + version + '.tar.gz' + authSuffix,
-        headers: { 'accept': 'application/octet-stream' },
-        strictSSL: self.defaultRequestOptions.strictSSL
-      })
+        headers: { 'accept': 'application/octet-stream' }
+      }, self.defaultRequestOptions))
       .on('response', function(pkgRes) {
         if (pkgRes.statusCode != 200)
           return reject('Bad response code ' + pkgRes.statusCode);
