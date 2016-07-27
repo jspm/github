@@ -316,9 +316,41 @@ GithubLocation.prototype = {
   lookup: function(repo) {
     var self = this;
     var remoteString = this.remoteString;
-    return lsRemote(extend({
-      url: remoteString + repo + '.git'
-    }, self.defaultRequestOptions))
+
+    return Promise.resolve()
+    .then(function() {
+      if(this.auth && this.auth.token) {
+        // use API to get branches/tags
+        return Promise.all(['tags', 'heads'].map(function(type) {
+          return asp(request)(extend({
+            uri: this.apiRemoteString + 'repos/' + repo + '/git/refs/' + type + this.authSuffix,
+            headers: {
+              'Accept': 'application/vnd.github.v3.raw'
+            },
+            qs: {
+              ref: version
+            }
+          }, self.defaultRequestOptions));
+        })).then(function(tagRes, headRes) {
+          if (tagRes.statusCode != 200)
+            throw { statusCode: tagRes.statusCode, headers: tagRes.headers, api: true };
+          else if (headRes.statusCode != 200)
+            throw { statusCode: headRes.statusCode, headers: tagRes.headers, api: true };
+
+          var tags = JSON.parse(tagRes.body);
+          var heads = JSON.parse(headRes.body);
+
+          return tags.concat(heads).map(function(obj) {
+            return { hash: obj.object.sha, name: obj.ref };
+          });
+        });
+      } else {
+        // fallback to git-based approach
+        return lsRemote(extend({
+          url: remoteString + repo + '.git'
+        }, self.defaultRequestOptions));
+      }
+    })
     .then(function(refs) {
       var versions = {};
       refs.forEach(function(ref) {
@@ -347,13 +379,32 @@ GithubLocation.prototype = {
       });
 
       return { versions: versions };
-    }, function(error) {
-      // 401 does not mean authentication failure in this instance
-      if (error.statusCode && (error.statusCode == 401 || error.statusCode == 404)) return { notfound: true };
-      if (error.statusCode) error = new Error('Invalid status code when fetching versions: ' + error.statusCode);
-      else if(typeof error == 'string') {
+    }
+    .catch(function(error) {
+      if (error.statusCode) {
+        var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2)); 
+
+        if (error.api && (error.statusCode == 406 || error.statusCode == 401)) {
+          if (error.api) {
+            hasApiFailure
+            // TODO: replace this with the api failure response
+            error = new Error('api says invalid auth: ' error.statusCode + headerSuffix);
+          }
+          else
+            error = new Error('Invalid authentication details.\n' +
+            'Run %jspm registry config ' + self.name + '% to reconfigure the credentials, or update them in your ~/.netrc file.';
+          }
+        }
+        else if (error.statusCode == 404)
+          return { notfound: true };
+        else
+          error = new Error('invalid status code: ' + error.statusCode + headerSuffix);
+      }
+
+      if(typeof error == 'string') {
         error = new Error(error);
       }
+
       error.retriable = true;
       error.hideStack = true;
       throw error;
