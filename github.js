@@ -195,12 +195,25 @@ function configureCredentials(config, ui) {
 
   return Promise.resolve()
   .then(function() {
-    ui.log('info', 'You can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
-    return ui.input('Enter your GitHub access token');
+    ui.log('info', 'If using two-factor authentication or to avoid using your password you can generate an access token at %https://' + (config.hostname || 'github.com') + '/settings/tokens%.');
+    return ui.input('Enter your GitHub username or access token');
   })
-  .then(function(token) {
-    auth.token = token;
-    if (auth.token) {
+  .then(function(entered) {
+    if (!entered) {
+      return false;
+    } else if (isGithubToken(entered)) {
+      auth.token = entered;
+    } else {
+      auth.username = entered;
+      return ui.input('Enter your GitHub password', null, true);
+    }
+  })
+  .then(function(password) {
+    if (password) {
+      auth.password = password;
+    }
+
+    if (auth.username || auth.token) {
       return ui.confirm('Would you like to test these credentials?', true);
     }
   })
@@ -225,7 +238,7 @@ function configureCredentials(config, ui) {
     })
     .then(function(res) {
       if (res.statusCode == 401) {
-        ui.log('warn', 'Provided GitHub credentials are not authorized, try re-entering your access token.');
+        ui.log('warn', 'Provided GitHub credentials are not authorized, try re-entering your password or access token.');
       }
       else if (res.statusCode != 200) {
         ui.log('warn', 'Invalid response code, %' + res.statusCode + '%');
@@ -344,7 +357,8 @@ GithubLocation.prototype = {
       execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
         if (err) {
           if (err.toString().indexOf('not found') == -1) {
-            var error = new Error(stderr);
+            // dont show plain text passwords in error
+            var error = new Error(stderr.toString().replace(remoteString, ''));
             error.hideStack = true;
             error.retriable = true;
             reject(error);
