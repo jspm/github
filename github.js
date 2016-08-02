@@ -15,7 +15,7 @@ var semver = require('semver');
 
 function extend(dest, src) {
   for (var key in src) {
-    if(key in dest && typeof dest[key] === 'object') extend(dest[key], src[key]);
+    if (key in dest && typeof dest[key] === 'object') extend(dest[key], src[key]);
     else dest[key] = src[key]
   }
 
@@ -419,7 +419,7 @@ GithubLocation.prototype = {
           error = new Error('invalid status code: ' + error.statusCode + headerSuffix);
       }
 
-      if(typeof error == 'string') {
+      if (typeof error == 'string') {
         error = new Error(error);
       }
 
