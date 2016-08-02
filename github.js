@@ -379,19 +379,19 @@ GithubLocation.prototype = {
       });
 
       return { versions: versions };
-    }
+    })
     .catch(function(error) {
       if (error.statusCode) {
-        var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2)); 
+        var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2); 
 
         if (error.statusCode == 406 || error.statusCode == 401) {
           if (error.api) {
             // TODO: replace this with the api failure response
-            error = new Error('api says invalid auth: ' error.statusCode + headerSuffix);
+            error = new Error('api says invalid auth: ' + error.statusCode + headerSuffix);
           }
-          else
+          else {
             error = new Error('Invalid authentication details.\n' +
-            'Run %jspm registry config ' + self.name + '% to reconfigure the credentials, or update them in your ~/.netrc file.';
+            'Run %jspm registry config ' + self.name + '% to reconfigure the credentials, or update them in your ~/.netrc file.');
           }
         }
         else if (error.statusCode == 404)
