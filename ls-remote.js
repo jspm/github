@@ -1,17 +1,20 @@
-var request = require('request');
+var asp = require('bluebird').Promise.promisify;
+var request = asp(require('request'));
 
-module.exports = function(opts, cb) {
-  opts.encoding = null;
-  opts.url += '/info/refs?service=git-upload-pack';
+module.exports = function(opts) {
+  return Promise.resolve()
+  .then(function() {
+    opts.encoding = null;
+    opts.url += '/info/refs?service=git-upload-pack';
 
-  request(opts, function(err, response, body) {
-    // network errors
-    if (err) return cb(err);
-
-    if (response.statusCode != 200) return cb({ statusCode: response.statusCode, headers: response.headers });
+    return request(opts)
+  })
+  .then(function(response) {
+    if (response.statusCode != 200) throw { statusCode: response.statusCode, headers: response.headers };
     // per the specification, content-type must be this
-    if (response.headers['content-type'] != 'application/x-git-upload-pack-advertisement') return cb({ statusCode: 500, headers: response.statusCode });
+    if (response.headers['content-type'] != 'application/x-git-upload-pack-advertisement')  throw { statusCode: 500, headers: response.statusCode };
 
+    var body = response.body;
     var lines = [];
     var pos = 0;
     while (pos < body.length) {
@@ -25,11 +28,11 @@ module.exports = function(opts, cb) {
     }
 
     // verify the first line is git-upload-pack
-    if( lines.shift() != '# service=git-upload-pack') return cb({ statusCode: 500, headers: response.headers });
+    if( lines.shift() != '# service=git-upload-pack') throw { statusCode: 500, headers: response.headers };
 
     // verify the second line is the HEAD
     // e.g. 21d0a9aa00806bb7f67ef5cd98c876aa20e4d803 HEAD\u0000multi_ack thin-pack [...]
-    if (lines.shift().substr(41, 4) != 'HEAD') return cb({ statusCode: 500, headers: response.headers });
+    if (lines.shift().substr(41, 4) != 'HEAD') throw { statusCode: 500, headers: response.headers };
 
     // parse the remaining lines
     var refs = lines.map(function(line) {
@@ -38,7 +41,8 @@ module.exports = function(opts, cb) {
         name: line.substr(41)
       };
     });
-    cb(null, refs);
+
+    return refs;
   });
 }
 

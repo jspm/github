@@ -27,7 +27,7 @@ try {
 }
 catch(e) {}
 
-var lsRemote = asp(require('./ls-remote'));
+var lsRemote = require('./ls-remote');
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
