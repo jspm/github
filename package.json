@@ -4,7 +4,7 @@
   "description": "jspm GitHub endpoint",
   "main": "github.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "repository": {
     "type": "git",
@@ -19,16 +19,15 @@
     "expand-tilde": "^1.2.0",
     "bluebird": "^3.0.5",
     "graceful-fs": "^4.1.3",
-    "mkdirp": "~0.5.0",
+    "mkdirp": "^0.5.0",
     "netrc": "^0.1.3",
-    "request": "~2.53.0",
-    "rimraf": "~2.3.2",
+    "request": "^2.53.0",
+    "rimraf": "^2.3.2",
     "semver": "^5.0.1",
-    "tar-fs": "^1.13.0",
-    "which": "^1.0.9"
+    "tar-fs": "^1.13.0"
   },
   "homepage": "https://github.com/jspm/github",
   "devDependencies": {
-    "mocha": "~2.2.4"
+    "mocha": "^2.2.4"
   }
 }

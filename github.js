@@ -13,11 +13,10 @@ var zlib = require('zlib');
 
 var semver = require('semver');
 
-var which = require('which');
-
 function extend(dest, src) {
   for (var key in src) {
-    dest[key] = src[key]
+    if (typeof dest[key] === 'object') extend(dest[key], src[key]);
+    else dest[key] = src[key];
   }
 
   return dest;
@@ -28,7 +27,7 @@ try {
 }
 catch(e) {}
 
-var execGit = require('./exec-git');
+var lsRemote = require('./ls-remote');
 
 function createRemoteStrings(auth, hostname) {
   var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
@@ -82,15 +81,6 @@ function isGithubToken(token) {
 }
 
 var GithubLocation = function(options, ui) {
-
-  // ensure git is installed
-  try {
-    which.sync('git');
-  }
-  catch(ex) {
-    throw 'Git not installed. You can install git from `http://git-scm.com/downloads`.';
-  }
-
   this.name = options.name;
 
   this.max_repo_size = (options.maxRepoSize || 0) * 1024 * 1024;
@@ -112,21 +102,12 @@ var GithubLocation = function(options, ui) {
 
   this.ui = ui;
 
-  this.execOpt = {
-    cwd: options.tmpDir,
-    timeout: options.timeout * 1000,
-    killSignal: 'SIGKILL',
-    maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
-    env: extend({}, process.env)
-  };
-
   this.defaultRequestOptions = {
+    headers: {
+      'User-Agent': 'jspm'
+    },
     strictSSL: 'strictSSL' in options ? options.strictSSL : true
   };
-
-  if (!this.defaultRequestOptions.strictSSL) {
-    this.execOpt.env.GIT_SSL_NO_VERIFY = '1'
-  }
 
   var self = this, envMap = {
     ca: 'GIT_SSL_CAINFO',
@@ -137,7 +118,6 @@ var GithubLocation = function(options, ui) {
   ['ca', 'cert', 'key'].forEach(function(key) {
     if (key in options) {
       var path = expandTilde(options[key]);
-      self.execOpt.env[envMap[key]] = path;
       self.defaultRequestOptions[key] = fs.readFileSync(path, 'ascii');
     }
   });
@@ -302,16 +282,15 @@ GithubLocation.prototype = {
     return new Promise(function(resolve, reject) {
       request(extend({
         uri: remoteString + repo + authSuffix,
-        headers: {
-          'User-Agent': 'jspm'
-        },
         followRedirect: false
-      }, self.defaultRequestOptions
-      ))
+      }, self.defaultRequestOptions))
       .on('response', function(res) {
         // redirect
-        if (res.statusCode == 301)
-          resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
+        if (res.statusCode == 301) {
+          // strip access token
+          var path = require('url').parse(res.headers.location).pathname;
+          resolve({ redirect: self.name + ':' + path.substr(1) });
+        }
 
         if (res.statusCode == 401)
           reject('Invalid authentication details.\n' +
@@ -338,56 +317,124 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
-    var execOpt = this.execOpt;
+    var self = this;
     var remoteString = this.remoteString;
-    return new Promise(function(resolve, reject) {
-      execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
-        if (err) {
-          if (err.toString().indexOf('not found') == -1) {
-            var error = new Error(stderr);
-            error.hideStack = true;
-            error.retriable = true;
-            reject(error);
-          }
-          else
-            resolve({ notfound: true });
-        }
 
-        versions = {};
-        var refs = stdout.split('\n');
-        for (var i = 0; i < refs.length; i++) {
-          if (!refs[i])
-            continue;
-
-          var hash = refs[i].substr(0, refs[i].indexOf('\t'));
-          var refName = refs[i].substr(hash.length + 1);
-          var version;
-          var versionObj = { hash: hash, meta: {} };
-
-          if (refName.substr(0, 11) == 'refs/heads/') {
-            version = refName.substr(11);
-            versionObj.stable = false;
-          }
-
-          else if (refName.substr(0, 10) == 'refs/tags/') {
-            if (refName.substr(refName.length - 3, 3) == '^{}')
-              version = refName.substr(10, refName.length - 13);
-            else
-              version = refName.substr(10);
-
-            if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
-              version = version.substr(1);
-              // note when we remove a "v" which versions we need to add it back to
-              // to work out the tag version again
-              versionObj.meta.vPrefix = true;
+    return Promise.resolve()
+    .then(function() {
+      if (self.auth && self.auth.token) {
+        // use API to get branches/tags
+        return Promise.all(['tags', 'heads'].map(function(type) {
+          return asp(request)(extend({
+            uri: self.apiRemoteString + 'repos/' + repo + '/git/refs/' + type + self.authSuffix,
+            headers: {
+              'Accept': 'application/vnd.github.v3.raw'
             }
-          }
+          }, self.defaultRequestOptions));
+        })).then(function(responses) {
+          var tagRes = responses[0];
+          var headRes = responses[1];
 
-          versions[version] = versionObj;
+          var refs = [];
+
+          // there should always be heads
+          if (headRes.statusCode != 200)
+            throw { statusCode: headRes.statusCode, headers: headRes.headers, api: true };
+          else
+            refs = refs.concat(JSON.parse(headRes.body));
+
+          // tag response can be 404, i.e. no tags
+          if (tagRes.statusCode == 200)
+            refs = refs.concat(JSON.parse(tagRes.body));
+          else if (tagRes.statusCode != 404)
+            throw { statusCode: tagRes.statusCode, headers: tagRes.headers, api: true };
+
+          return refs.map(function(obj) {
+            return { sha: obj.object.sha, name: obj.ref };
+          });
+        });
+      } else {
+        // fallback to git-based approach
+        return false;
+      }
+    })
+    .catch(function(e) {
+      if (e.headers && e.headers['x-ratelimit-remaining'] == '0') {
+        if (!apiWarned) {
+          ui.log('API ratelimit reached, falling back to slower git protocol');
+          apiWarned = true;
+        }
+        // fallback to git-based approach
+        return false;
+      } else {
+        throw e;
+      }
+    })
+    .then(function(refs) {
+      // API response
+      if (refs) return refs;
+
+      // no API auth or API auth is rate-limited, use git
+      return lsRemote(extend({
+        url: remoteString + repo + '.git'
+      }, self.defaultRequestOptions));
+    })
+    .then(function(refs) {
+      var versions = {};
+      refs.forEach(function(ref) {
+        var version;
+        var versionObj = { hash: ref.sha, meta: {} };
+        if (ref.name.substr(0, 11) == 'refs/heads/') {
+          version = ref.name.substr(11);
+          versionObj.stable = false;
         }
 
-        resolve({ versions: versions });
+        else if (ref.name.substr(0, 10) == 'refs/tags/') {
+          if (ref.name.substr(ref.name.length - 3, 3) == '^{}')
+            version = ref.name.substr(10, ref.name.length - 13);
+          else
+            version = ref.name.substr(10);
+
+          if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
+            version = version.substr(1);
+            // note when we remove a "v" which versions we need to add it back to
+            // to work out the tag version again
+            versionObj.meta.vPrefix = true;
+          }
+        }
+
+        versions[version] = versionObj;
       });
+
+      return { versions: versions };
+    })
+    .catch(function(error) {
+      if (error.statusCode) {
+        var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2);
+
+        if (error.statusCode == 406 || error.statusCode == 401) {
+          if (error.api) {
+            // TODO: replace this with the api failure response code from below
+            error = new Error('api says invalid auth: ' + error.statusCode + headerSuffix);
+          }
+          else {
+            error = new Error('Invalid authentication details.\n' +
+            'Run %jspm registry config ' + self.name + '% to reconfigure the credentials, or update them in your ~/.netrc file.');
+          }
+        }
+        else if (error.statusCode == 404)
+          return { notfound: true };
+        else
+          error = new Error('invalid status code: ' + error.statusCode + headerSuffix);
+      }
+
+      if (typeof error == 'string') {
+        error = new Error(error);
+      }
+
+      error.retriable = true;
+      error.hideStack = true;
+      throw error;
     });
   },
 
@@ -400,17 +447,16 @@ GithubLocation.prototype = {
     var self = this;
     var ui = this.ui;
 
-    return asp(request)({
+    return asp(request)(extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json' + this.authSuffix,
       headers: {
-        'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3.raw'
       },
       qs: {
         ref: version
-      },
-      strictSSL: this.defaultRequestOptions.strictSSL
-    }).then(function(res) {
+      }
+    }, self.defaultRequestOptions))
+    .then(function(res) {
       // API auth failure warnings
       function apiFailWarn(reason, showAuthCommand) {
         if (apiWarned)
@@ -420,14 +466,14 @@ GithubLocation.prototype = {
             + (showAuthCommand ? '\nTo resolve use %jspm registry config github% to configure the credentials, or update them in your ~/.netrc file.' : ''));
         apiWarned = true;
       }
-      
+
       if (res.headers.status.match(/^401/))
         return apiFailWarn('lack of authorization', true);
       if (res.headers.status.match(/^406/))
         return apiFailWarn('insufficient permissions. Ensure you have public_repo access.');
       if (res.headers['x-ratelimit-remaining'] == '0') {
         if (self.auth)
-          return apiFailWarn('the rate limit being reached, which will be reset in `' + 
+          return apiFailWarn('the rate limit being reached, which will be reset in `' +
               Math.round((res.headers['x-ratelimit-reset'] * 1000 - new Date(res.headers.date).getTime()) / 60000) + ' minutes`.');
         return apiFailWarn('the rate limit being reached.', true);
       }
@@ -456,7 +502,7 @@ GithubLocation.prototype = {
 
     var self = this;
 
-    if ((packageConfig.dependencies || packageConfig.peerDependencies || packageConfig.optionalDependencies) && 
+    if ((packageConfig.dependencies || packageConfig.peerDependencies || packageConfig.optionalDependencies) &&
         !packageConfig.registry && (!packageConfig.jspm || !(packageConfig.jspm.dependencies || packageConfig.jspm.peerDependencies || packageConfig.jspm.optionalDependencies))) {
       var hasDependencies = false;
       for (var p in packageConfig.dependencies)
@@ -534,7 +580,6 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    var execOpt = this.execOpt;
     var max_repo_size = this.max_repo_size;
     var remoteString = this.remoteString;
     var authSuffix = this.authSuffix;
@@ -543,11 +588,10 @@ GithubLocation.prototype = {
 
     // Download from the git archive
     return new Promise(function(resolve, reject) {
-      request({
+      request(extend({
         uri: remoteString + repo + '/archive/' + version + '.tar.gz' + authSuffix,
-        headers: { 'accept': 'application/octet-stream' },
-        strictSSL: self.defaultRequestOptions.strictSSL
-      })
+        headers: { 'accept': 'application/octet-stream' }
+      }, self.defaultRequestOptions))
       .on('response', function(pkgRes) {
         if (pkgRes.statusCode != 200)
           return reject('Bad response code ' + pkgRes.statusCode);
