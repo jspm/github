@@ -8,7 +8,7 @@ suite('Github', function() {
     auth: '',
     name: 'github'
   });
-  
+
   suite('locate', function() {
     test('jspm/github', function() {
       return github.locate('jspm/github', 'jspm/github exists');
@@ -23,7 +23,7 @@ suite('Github', function() {
 
     test('jspm/thisdoesnotexist', function() {
       return github.locate('jspm/thisdoesnotexist').then(function() {
-        // todo: this should throw
+        // todo: this should throw if using the api
         // assert(false);
       });
     });

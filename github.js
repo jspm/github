@@ -321,6 +321,7 @@ GithubLocation.prototype = {
     .then(function() {
       if(this.auth && this.auth.token) {
         // use API to get branches/tags
+        // TODO: fallback to git protocol if the API has been rate-limited
         return Promise.all(['tags', 'heads'].map(function(type) {
           return asp(request)(extend({
             uri: this.apiRemoteString + 'repos/' + repo + '/git/refs/' + type + this.authSuffix,
