@@ -15,8 +15,8 @@ var semver = require('semver');
 
 function extend(dest, src) {
   for (var key in src) {
-    if (key in dest && typeof dest[key] === 'object') extend(dest[key], src[key]);
-    else dest[key] = src[key]
+    if (typeof dest[key] === 'object') extend(dest[key], src[key]);
+    else dest[key] = src[key];
   }
 
   return dest;
