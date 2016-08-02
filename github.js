@@ -319,9 +319,8 @@ GithubLocation.prototype = {
 
     return Promise.resolve()
     .then(function() {
-      if(this.auth && this.auth.token) {
+      if (this.auth && this.auth.token) {
         // use API to get branches/tags
-        // TODO: fallback to git protocol if the API has been rate-limited
         return Promise.all(['tags', 'heads'].map(function(type) {
           return asp(request)(extend({
             uri: this.apiRemoteString + 'repos/' + repo + '/git/refs/' + type + this.authSuffix,
@@ -347,10 +346,29 @@ GithubLocation.prototype = {
         });
       } else {
         // fallback to git-based approach
-        return lsRemote(extend({
-          url: remoteString + repo + '.git'
-        }, self.defaultRequestOptions));
+        return false;
       }
+    })
+    .catch(function(e) {
+      if (e.headers['x-ratelimit-remaining'] == '0') {
+        if (!apiWarned) {
+          ui.log('API ratelimit reached, falling back to slower git protocol');
+          apiWarned = true;
+        }
+        // fallback to git-based approach
+        return false;
+      } else {
+        throw res;
+      }
+    })
+    .then(function(refs) {
+      // API response
+      if (refs) return refs;
+
+      // no API auth or API auth is rate-limited, use git
+      return lsRemote(extend({
+        url: remoteString + repo + '.git'
+      }, self.defaultRequestOptions));
     })
     .then(function(refs) {
       var versions = {};
@@ -387,7 +405,7 @@ GithubLocation.prototype = {
 
         if (error.statusCode == 406 || error.statusCode == 401) {
           if (error.api) {
-            // TODO: replace this with the api failure response
+            // TODO: replace this with the api failure response code from below
             error = new Error('api says invalid auth: ' + error.statusCode + headerSuffix);
           }
           else {
