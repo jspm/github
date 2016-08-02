@@ -384,9 +384,8 @@ GithubLocation.prototype = {
       if (error.statusCode) {
         var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2)); 
 
-        if (error.api && (error.statusCode == 406 || error.statusCode == 401)) {
+        if (error.statusCode == 406 || error.statusCode == 401) {
           if (error.api) {
-            hasApiFailure
             // TODO: replace this with the api failure response
             error = new Error('api says invalid auth: ' error.statusCode + headerSuffix);
           }
