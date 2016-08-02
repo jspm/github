@@ -1,19 +1,14 @@
 var githubRegistry = require('../github');
 
-
-
 suite('Github', function() {
-  var github;
-  setup(function() {
-    github = new githubRegistry({
-      baseDir: '.',
-      log: true,
-      tmpDir: '.',
-      auth: '',
-      name: 'github'
-    });
+  var github = new githubRegistry({
+    baseDir: '.',
+    log: true,
+    tmpDir: '.',
+    auth: '',
+    name: 'github'
   });
-
+  
   suite('locate', function() {
     test('jspm/github', function() {
       return github.locate('jspm/github', 'jspm/github exists');
