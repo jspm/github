@@ -322,29 +322,35 @@ GithubLocation.prototype = {
 
     return Promise.resolve()
     .then(function() {
-      if (this.auth && this.auth.token) {
+      if (self.auth && self.auth.token) {
         // use API to get branches/tags
         return Promise.all(['tags', 'heads'].map(function(type) {
           return asp(request)(extend({
-            uri: this.apiRemoteString + 'repos/' + repo + '/git/refs/' + type + this.authSuffix,
+            uri: self.apiRemoteString + 'repos/' + repo + '/git/refs/' + type + self.authSuffix,
             headers: {
               'Accept': 'application/vnd.github.v3.raw'
-            },
-            qs: {
-              ref: version
             }
           }, self.defaultRequestOptions));
-        })).then(function(tagRes, headRes) {
-          if (tagRes.statusCode != 200)
+        })).then(function(responses) {
+          var tagRes = responses[0];
+          var headRes = responses[1];
+
+          var refs = [];
+
+          // there should always be heads
+          if (headRes.statusCode != 200)
+            throw { statusCode: headRes.statusCode, headers: headRes.headers, api: true };
+          else
+            refs = refs.concat(JSON.parse(headRes.body));
+
+          // tag response can be 404, i.e. no tags
+          if (tagRes.statusCode == 200)
+            refs = refs.concat(JSON.parse(tagRes.body));
+          else if (tagRes.statusCode != 404)
             throw { statusCode: tagRes.statusCode, headers: tagRes.headers, api: true };
-          else if (headRes.statusCode != 200)
-            throw { statusCode: headRes.statusCode, headers: tagRes.headers, api: true };
 
-          var tags = JSON.parse(tagRes.body);
-          var heads = JSON.parse(headRes.body);
-
-          return tags.concat(heads).map(function(obj) {
-            return { hash: obj.object.sha, name: obj.ref };
+          return refs.map(function(obj) {
+            return { sha: obj.object.sha, name: obj.ref };
           });
         });
       } else {
@@ -353,7 +359,7 @@ GithubLocation.prototype = {
       }
     })
     .catch(function(e) {
-      if (e.headers['x-ratelimit-remaining'] == '0') {
+      if (e.headers && e.headers['x-ratelimit-remaining'] == '0') {
         if (!apiWarned) {
           ui.log('API ratelimit reached, falling back to slower git protocol');
           apiWarned = true;
@@ -361,7 +367,7 @@ GithubLocation.prototype = {
         // fallback to git-based approach
         return false;
       } else {
-        throw res;
+        throw e;
       }
     })
     .then(function(refs) {
