@@ -1,9 +1,10 @@
 var githubRegistry = require('../github');
 
 testSuits('Github', '');
-if(process.env.token)
+if (process.env.token)
   testSuits('Github with token auth', process.env.token);
-
+if (process.env.ghuser)
+  testSuits('Github with user:token auth', new Buffer(process.env.ghuser + ':' + process.env.token).toString('base64'));
 
 function testSuits(name, auth) {
   suite(name, function() {
