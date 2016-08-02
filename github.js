@@ -410,7 +410,7 @@ GithubLocation.prototype = {
     })
     .catch(function(error) {
       if (error.statusCode) {
-        var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2); 
+        var headerSuffix = '\n' + JSON.stringify(error.headers, null, 2);
 
         if (error.statusCode == 406 || error.statusCode == 401) {
           if (error.api) {
@@ -466,14 +466,14 @@ GithubLocation.prototype = {
             + (showAuthCommand ? '\nTo resolve use %jspm registry config github% to configure the credentials, or update them in your ~/.netrc file.' : ''));
         apiWarned = true;
       }
-      
+
       if (res.headers.status.match(/^401/))
         return apiFailWarn('lack of authorization', true);
       if (res.headers.status.match(/^406/))
         return apiFailWarn('insufficient permissions. Ensure you have public_repo access.');
       if (res.headers['x-ratelimit-remaining'] == '0') {
         if (self.auth)
-          return apiFailWarn('the rate limit being reached, which will be reset in `' + 
+          return apiFailWarn('the rate limit being reached, which will be reset in `' +
               Math.round((res.headers['x-ratelimit-reset'] * 1000 - new Date(res.headers.date).getTime()) / 60000) + ' minutes`.');
         return apiFailWarn('the rate limit being reached.', true);
       }
@@ -502,7 +502,7 @@ GithubLocation.prototype = {
 
     var self = this;
 
-    if ((packageConfig.dependencies || packageConfig.peerDependencies || packageConfig.optionalDependencies) && 
+    if ((packageConfig.dependencies || packageConfig.peerDependencies || packageConfig.optionalDependencies) &&
         !packageConfig.registry && (!packageConfig.jspm || !(packageConfig.jspm.dependencies || packageConfig.jspm.peerDependencies || packageConfig.jspm.optionalDependencies))) {
       var hasDependencies = false;
       for (var p in packageConfig.dependencies)
