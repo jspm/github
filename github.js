@@ -565,7 +565,7 @@ GithubLocation.prototype = {
         if (release.type == 'tar') {
           (inPipe = zlib.createGunzip())
           .pipe(tar.Extract({
-            path: outDir, 
+            path: outDir,
             strip: 0,
             filter: function() {
               return !this.type.match(/^.*Link$/);
@@ -780,7 +780,7 @@ GithubLocation.prototype = {
               // src.zip comes after file.zip
               return asset.name.indexOf('src') == -1 ? -1 : 1;
             })[0];
-            
+
             if (!firstAsset)
               return false;
 
