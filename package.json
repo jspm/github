@@ -18,10 +18,10 @@
   "dependencies": {
     "expand-tilde": "^1.2.0",
     "graceful-fs": "^4.1.3",
-    "mkdirp": "~0.5.0",
+    "mkdirp": "^0.5.1",
     "netrc": "^0.1.3",
-    "request": "~2.74.0",
-    "rimraf": "~2.5.4",
+    "request": "^2.74.0",
+    "rimraf": "^2.5.4",
     "rsvp": "^3.0.17",
     "semver": "^5.0.1",
     "tar": "^2.2.1",
