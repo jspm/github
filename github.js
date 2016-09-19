@@ -589,7 +589,7 @@ GithubLocation.prototype = {
       main = main[0];
 
     if (typeof main != 'string')
-      return;
+      return packageConfig;
 
     // convert to windows-style paths if necessary
     main = main.replace(/\//g, path.sep);
