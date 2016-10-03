@@ -30,8 +30,6 @@ try {
 }
 catch(e) {}
 
-var execGit = require('./exec-git');
-
 function createRemoteStrings(auth, hostname) {
   var authString = auth.username ? (encodeURIComponent(auth.username) + ':' + encodeURIComponent(auth.password) + '@') : '';
   hostname = hostname || 'github.com';
@@ -117,32 +115,15 @@ var GithubLocation = function(options, ui) {
 
   this.ui = ui;
 
-  this.execOpt = {
-    cwd: options.tmpDir,
-    timeout: options.timeout * 1000,
-    killSignal: 'SIGKILL',
-    maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
-    env: extend({}, process.env)
-  };
-
   this.defaultRequestOptions = {
     strictSSL: 'strictSSL' in options ? options.strictSSL : true
   };
 
-  if (!this.defaultRequestOptions.strictSSL) {
-    this.execOpt.env.GIT_SSL_NO_VERIFY = '1'
-  }
-
-  var self = this, envMap = {
-    ca: 'GIT_SSL_CAINFO',
-    cert: 'GIT_SSL_CERT',
-    key: 'GIT_SSL_KEY'
-  };
+  var self = this;
 
   ['ca', 'cert', 'key'].forEach(function(key) {
     if (key in options) {
       var path = expandTilde(options[key]);
-      self.execOpt.env[envMap[key]] = path;
       self.defaultRequestOptions[key] = fs.readFileSync(path, 'ascii');
     }
   });
@@ -376,45 +357,45 @@ GithubLocation.prototype = {
   // { versions: { versionhash } }
   // { notfound: true }
   lookup: function(repo) {
-    var execOpt = this.execOpt;
-    var remoteString = this.remoteString;
-    return new Promise(function(resolve, reject) {
-      execGit('ls-remote ' + remoteString.replace(/(['"()])/g, '\\\$1') + repo + '.git refs/tags/* refs/heads/*', execOpt, function(err, stdout, stderr) {
-        if (err) {
-          if (err.toString().indexOf('not found') == -1) {
-            // dont show plain text passwords in error
-            var error = new Error(stderr.toString().replace(remoteString, ''));
-            error.hideStack = true;
-            error.retriable = true;
-            reject(error);
-          }
-          else
-            resolve({ notfound: true });
-        }
+    var remoteString = this.apiRemoteString;
+    var authSuffix = this.authSuffix;
 
-        versions = {};
-        var refs = stdout.split('\n');
-        for (var i = 0; i < refs.length; i++) {
-          if (!refs[i])
-            continue;
+    var promises = ['heads', 'tags'].map(function(scope) {
+      return asp(request)(extend({
+        uri: remoteString + 'repos/' + repo + '/git/refs/' + scope + authSuffix,
+        headers: {
+          'User-Agent': 'jspm',
+          'Accept': 'application/vnd.github.v3.raw'
+        },
+      }, this.defaultRequestOptions
+      )).then(function(res) {
+        var rateLimitResponse = checkRateLimit.call(this, res.headers);
+        if (rateLimitResponse)
+          return rateLimitResponse;
+        return res;
+      })
+    });
 
-          var hash = refs[i].substr(0, refs[i].indexOf('\t'));
-          var refName = refs[i].substr(hash.length + 1);
+    return Promise.all(promises).then(function(values) {
+      var versions = {};
+
+      values.forEach(function(res) {
+        JSON.parse(res.body).forEach(function(entry) {
+          var hash = entry.object.sha;
+          var refName = entry.ref;
           var version;
           var versionObj = { hash: hash, meta: {} };
 
-          if (refName.substr(0, 11) == 'refs/heads/') {
-            version = refName.substr(11);
+          if (refName.startsWith('refs/heads/')) {
+            version = refName.substr('refs/heads/'.length);
             versionObj.stable = false;
-          }
-
-          else if (refName.substr(0, 10) == 'refs/tags/') {
-            if (refName.substr(refName.length - 3, 3) == '^{}')
-              version = refName.substr(10, refName.length - 13);
+          } else if (refName.startsWith('refs/tags/')) {
+            if (refName.endsWith('^{}'))
+              version = refName.substr('refs/tags/'.length, refName.length - 13); // TODO: what is this "13"?
             else
-              version = refName.substr(10);
+              version = refName.substr('refs/tags/'.length);
 
-            if (version.substr(0, 1) == 'v' && semver.valid(version.substr(1))) {
+            if (version.startsWith('v') && semver.valid(version.substr(1))) {
               version = version.substr(1);
               // note when we remove a "v" which versions we need to add it back to
               // to work out the tag version again
@@ -423,10 +404,12 @@ GithubLocation.prototype = {
           }
 
           versions[version] = versionObj;
-        }
+        })
+      })
 
-        resolve({ versions: versions });
-      });
+      return { versions: versions };
+    }).catch(function(reason) {
+      return { notfound: true };
     });
   },
 
@@ -539,7 +522,6 @@ GithubLocation.prototype = {
     if (meta.vPrefix)
       version = 'v' + version;
 
-    var execOpt = this.execOpt;
     var max_repo_size = this.max_repo_size;
     var remoteString = this.remoteString;
     var authSuffix = this.authSuffix;
@@ -558,7 +540,7 @@ GithubLocation.prototype = {
         if (release.type == 'tar') {
           (inPipe = zlib.createGunzip())
           .pipe(tar.Extract({
-            path: outDir, 
+            path: outDir,
             strip: 0,
             filter: function() {
               return !this.type.match(/^.*Link$/);
@@ -773,7 +755,7 @@ GithubLocation.prototype = {
               // src.zip comes after file.zip
               return asset.name.indexOf('src') == -1 ? -1 : 1;
             })[0];
-            
+
             if (!firstAsset)
               return false;
 
