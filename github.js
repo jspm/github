@@ -115,9 +115,11 @@ var GithubLocation = function(options, ui) {
 
   this.ui = ui;
 
+  console.log(options.timeouts.download);
+
   this.execOpt = {
     cwd: options.tmpDir,
-    timeout: options.timeout * 1000,
+    timeout: options.timeouts.download * 1000,
     killSignal: 'SIGKILL',
     maxBuffer: this.max_repo_size || 2 * 1024 * 1024,
     env: extend({}, process.env)
