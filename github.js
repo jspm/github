@@ -115,8 +115,6 @@ var GithubLocation = function(options, ui) {
 
   this.ui = ui;
 
-  console.log(options.timeouts.download);
-
   this.execOpt = {
     cwd: options.tmpDir,
     timeout: options.timeouts.download * 1000,
