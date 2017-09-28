@@ -64,9 +64,15 @@ function decodeCredentials(str) {
     password = auth[1];
   }
 
+  var token;
+  if (isGithubToken(this.auth.password)) {
+    token = this.auth.password;
+  }
+
   return {
     username: username,
-    password: password
+    password: password,
+    token: token
   };
 }
 
