@@ -64,9 +64,15 @@ function decodeCredentials(str) {
     password = auth[1];
   }
 
+  var token;
+  if (this.auth && isGithubToken(this.auth.password)) {
+    token = this.auth.password;
+  }
+
   return {
     username: username,
-    password: password
+    password: password,
+    token: token
   };
 }
 
@@ -83,7 +89,7 @@ function readNetrc(hostname) {
 }
 
 function isGithubToken(token) {
-  return token.match(/[0-9a-f]{40}/);
+  return token && token.match(/[0-9a-f]{40}/);
 }
 
 var GithubLocation = function(options, ui) {
