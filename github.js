@@ -65,8 +65,8 @@ function decodeCredentials(str) {
   }
 
   var token;
-  if (this.auth && isGithubToken(this.auth.password)) {
-    token = this.auth.password;
+  if (isGithubToken(password)) {
+    token = password;
   }
 
   return {
@@ -564,7 +564,7 @@ GithubLocation.prototype = {
         if (release.type == 'tar') {
           (inPipe = zlib.createGunzip())
           .pipe(tar.Extract({
-            path: outDir, 
+            path: outDir,
             strip: 0,
             filter: function() {
               return !this.type.match(/^.*Link$/);
@@ -779,7 +779,7 @@ GithubLocation.prototype = {
               // src.zip comes after file.zip
               return asset.name.indexOf('src') == -1 ? -1 : 1;
             })[0];
-            
+
             if (!firstAsset)
               return false;
 
