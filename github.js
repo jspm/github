@@ -355,7 +355,7 @@ GithubLocation.prototype = {
       .on('response', function(res) {
         // redirect
         if (res.statusCode == 301)
-          resolve({ redirect: self.name + ':' + res.headers.location.split('/').splice(3).join('/') });
+          resolve({ redirect: self.name + ':' + res.headers.location.split('?')[0].split('/').splice(3).join('/') });
 
         if (res.statusCode == 401)
           reject('Invalid authentication details.\n' +
