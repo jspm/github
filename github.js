@@ -585,7 +585,7 @@ GithubLocation.prototype = {
           .on('finish', function() {
             return clearDir(tmpDir)
             .then(function() {
-              return asp(fs.mkdir(tmpDir));
+              return asp(fs.mkdir)(tmpDir);
             })
             .then(function() {
               return new Promise(function(resolve, reject) {
