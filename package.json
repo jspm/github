@@ -1,5 +1,5 @@
 {
-  "name": "jspm-github",
+  "name": "@jspm/github",
   "version": "2.0.0-dev",
   "description": "jspm GitHub endpoint",
   "main": "github.js",
