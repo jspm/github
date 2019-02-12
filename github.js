@@ -99,8 +99,7 @@ module.exports = class GithubEndpoint {
 
       const username = await this.util.input('Enter your GitHub username', this._auth && this._auth.username !== 'Token' ? this._auth.username : '', {
         edit: true,
-        info: `jspm can generate an authentication token to install packages from GitHub with the best performance and for private repo support.
-  Leave blank to remove jspm credentials.`
+        info: `jspm can generate an authentication token to install packages from GitHub with the best performance and for private repo support. Leave blank to remove jspm credentials.`
       });
       
       if (!username) {
@@ -109,8 +108,7 @@ module.exports = class GithubEndpoint {
       }
       else {
         const password = await this.util.input('Enter your GitHub password or access token', {
-          info: `Your password is not saved locally and is only used to generate a token with the permission for repo access ${this.util.bold('repo')} to be saved into the jspm global configuration.
-  Alternatively, you can generate an access token manually from ${this.util.bold(`${this.githubApiUrl}/settings/tokens`)}.`,
+          info: `Your password is not saved locally and is only used to generate a token with the permission for repo access ${this.util.bold('repo')} to be saved into the jspm global configuration. Alternatively, you can generate an access token manually from ${this.util.bold(`${this.githubUrl}/settings/tokens`)}.`,
           silent: true,
           validate (input) {
             if (!input)
@@ -126,39 +124,55 @@ module.exports = class GithubEndpoint {
       }
     }
 
-    // get an API token if using basic auth
-    const res = await this.util.fetch(`${this.githubApiUrl}/authorizations`, {
-      method: 'POST',
-      headers: { accept: githubApiAcceptHeader },
-      body: JSON.stringify({
-        scopes: ['repo'],
-        note: 'jspm token ' + Math.round(Math.random() * 10**10)
-      }),
-      timeout: this.timeout,
-      credentials
-    });
-    switch (res.status) {
-      case 201:
-        const response = await res.json();
-        this.util.globalConfig.set('registries.github.auth', response.token);
-        this._auth = credentials.basicAuth = {
-          username: 'Token',
-          password: response.token
-        };
-        this.util.log.ok('GitHub token generated successfully from basic auth credentials.');
-      break;
-      case 401:
-        if (!userInput)
-          return;
-        this.credentialsAttempts++;
-        if (credentialsAttempts === 3)
-          throw new Error(`Unable to setup GitHub credentials.`);
-        this.util.log.warn('GitHub username and password combination is invalid. Please enter your details again.');
-        return await this.ensureAuth(credentials, true);
-      break;
-      default:
-        throw new Error(`Bad GitHub API response code ${res.status}: ${res.statusText}`);
-    }
+    const getAPIToken = async (otp) => {
+      // get an API token if using basic auth
+      const res = await this.util.fetch(`${this.githubApiUrl}/authorizations`, {
+        method: 'POST',
+        headers: {
+          accept: githubApiAcceptHeader,
+          'X-GitHub-OTP': otp
+        },
+        body: JSON.stringify({
+          scopes: ['repo'],
+          note: 'jspm token ' + Math.round(Math.random() * 10**10)
+        }),
+        timeout: this.timeout,
+        credentials,
+        reauthorize: false
+      });
+      switch (res.status) {
+        case 201:
+          const response = await res.json();
+          this.util.globalConfig.set('registries.github.auth', response.token);
+          this._auth = credentials.basicAuth = {
+            username: 'Token',
+            password: response.token
+          };
+          this.util.log.ok('GitHub token generated successfully from basic auth credentials.');
+        break;
+        case 401:
+          if (!this.userInput)
+            return;
+          if (++this.credentialsAttempts === 3)
+            throw new Error(`Unable to setup GitHub credentials.`);
+          const otpHeader = res.headers.get('x-github-otp');
+          if (otpHeader && otpHeader.startsWith('required')) {
+            const otp = await this.util.input('Please enter your GitHub 2FA token', {
+              validate (input) {
+                if (!input || input.length !== 6 || !input.match(/^[0-9]{6}$/))
+                  return 'Please enter a valid GitHub 6 digit 2FA Token.';
+              }
+            });
+            return getAPIToken(otp);
+          }
+          this.util.log.warn('GitHub username and password combination is invalid. Please enter your details again.');
+          return await this.ensureAuth(credentials, true);
+        break;
+        default:
+          throw new Error(`Bad GitHub API response code ${res.status}: ${res.statusText}`);
+      }
+    };
+    return getAPIToken();
   }
 
   /*
