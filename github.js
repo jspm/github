@@ -186,7 +186,7 @@ module.exports = class GithubEndpoint {
     // first check if we have a redirect
     {
       try {
-        var res = await this.util.fetch(`${this.githubApiUrl}/${packageName}`, {
+        var res = await this.util.fetch(`${this.githubApiUrl}/${packageName[0] === '@' ? packageName.substr(1) : packageName}`, {
           headers: {
             'User-Agent': 'jspm'
           },
@@ -237,7 +237,7 @@ module.exports = class GithubEndpoint {
     }
 
     try {
-      var stdout = await execGit(`ls-remote ${url}/${packageName}.git refs/tags/* refs/heads/*`, this.execOpt);
+      var stdout = await execGit(`ls-remote ${url}/${packageName[0] === '@' ? packageName.substr(1) : packageName}.git refs/tags/* refs/heads/*`, this.execOpt);
     }
     catch (err) {
       const str = err.toString();
@@ -313,13 +313,13 @@ Make sure that git is locally configured with permissions to ${this.githubUrl} o
       const hash = versionEntry.meta.expected;
 
       const resolved = versionEntry.resolved = {
-        source: `${this.githubUrl}/${packageName}/archive/${hash}.tar.gz`,
+        source: `${this.githubUrl}/${packageName[0] === '@' ? packageName.substr(1) : packageName}/archive/${hash}.tar.gz`,
         override: undefined
       };
 
       // if this fails, we just get no preloading
       if (!this.rateLimited) {
-        const res = await this.util.fetch(`${this.githubApiUrl}/repos/${packageName}/contents/package.json?ref=${hash}`, {
+        const res = await this.util.fetch(`${this.githubApiUrl}/repos/${packageName[0] === '@' ? packageName.substr(1) : packageName}/contents/package.json?ref=${hash}`, {
           headers: {
             'User-Agent': 'jspm',
             accept: githubApiRawAcceptHeader
