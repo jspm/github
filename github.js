@@ -292,18 +292,19 @@ Make sure that git is locally configured with permissions to ${this.githubUrl} o
 
     // first ensure we have the right ref hash
     // an exact commit is immutable
-    if (!commitRegEx.test(version)) {
-      versionEntry = lookup.versions[version];
-      if (!versionEntry)
-        lookup.versions[version] = versionEntry = { resolved: undefined, meta: { expected: version, resolved: undefined } };
+    if (commitRegEx.test(version)) {
+      versionEntry = lookup.versions[version] = { resolved: undefined, meta: { expected: version, resolved: undefined } };
     }
-    // we get refs through the full remote-ls lookup
-    else if (!(packageName in this.freshLookups)) {
-      await this.lookup(packageName, wildcardRange, lookup);
-      changed = true;
+    else {
       versionEntry = lookup.versions[version];
-      if (!versionEntry)
-        return changed;
+      // we get refs through the full remote-ls lookup
+      if (!(packageName in this.freshLookups)) {
+        await this.lookup(packageName, wildcardRange, lookup);
+        changed = true;
+        versionEntry = lookup.versions[version];
+        if (!versionEntry)
+          return changed;
+      }
     }
 
     // next we fetch the package.json file for that ref hash, to get the dependency information
