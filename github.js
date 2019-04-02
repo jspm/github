@@ -80,7 +80,7 @@ module.exports = class GithubEndpoint {
       const origin = url.origin;
       if (origin === this.githubUrl || origin === this.githubApiUrl) {
         // unauthorized -> fresh auth token
-        if (unauthorized)
+        if (unauthorizedHeaders)
           await this.ensureAuth(credentials, true);
         // update old jspm auth format to an automatically generated token, so we always use tokens
         // (can be deprecated eventually)
