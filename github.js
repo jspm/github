@@ -75,8 +75,8 @@ module.exports = class GithubEndpoint {
     this.util.log.ok('GitHub authentication updated.');
   }
 
-  async auth (url, credentials, unauthorized) {
-    if (unauthorized || this._auth) {
+  async auth (url, _method, credentials, unauthorizedHeaders) {
+    if (unauthorizedHeaders || this._auth) {
       const origin = url.origin;
       if (origin === this.githubUrl || origin === this.githubApiUrl) {
         // unauthorized -> fresh auth token
