@@ -1,6 +1,6 @@
 {
   "name": "@jspm/github",
-  "version": "2.0.0-dev",
+  "version": "1.0.0",
   "description": "jspm GitHub endpoint",
   "main": "github.js",
   "author": "Guy Bedford",
