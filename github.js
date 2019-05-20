@@ -195,8 +195,20 @@ module.exports = class GithubEndpoint {
         });
       }
       catch (err) {
-        err.retriable = true;
-        throw err;
+        // request the repo to check that it isn't a redirect
+        try {
+          var res = await this.util.fetch(`${this.githubUrl}/${packageName[0] === '@' ? packageName.substr(1) : packageName}`, {
+            headers: {
+              'User-Agent': 'jspm'
+            },
+            redirect: 'manual',
+            timeout: this.timeout
+          });
+        }
+        catch (err) {
+          err.retriable = true;
+          throw err;
+        }
       }
 
       switch (res.status) {
