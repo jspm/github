@@ -184,52 +184,38 @@ module.exports = class GithubEndpoint {
       return false;
 
     // first check if we have a redirect
-    {
-      try {
-        var res = await this.util.fetch(`${this.githubApiUrl}/${packageName[0] === '@' ? packageName.substr(1) : packageName}`, {
-          headers: {
-            'User-Agent': 'jspm'
-          },
-          redirect: 'manual',
-          timeout: this.timeout
-        });
-      }
-      catch (err) {
-        // request the repo to check that it isn't a redirect
-        try {
-          var res = await this.util.fetch(`${this.githubUrl}/${packageName[0] === '@' ? packageName.substr(1) : packageName}`, {
-            headers: {
-              'User-Agent': 'jspm'
-            },
-            redirect: 'manual',
-            timeout: this.timeout
-          });
-        }
-        catch (err) {
-          err.retriable = true;
-          throw err;
-        }
-      }
+    try {
+      var res = await this.util.fetch(`${this.githubUrl}/${packageName[0] === '@' ? packageName.substr(1) : packageName}`, {
+        headers: {
+          'User-Agent': 'jspm'
+        },
+        redirect: 'manual',
+        timeout: this.timeout
+      });
+    }
+    catch (err) {
+      err.retriable = true;
+      throw err;
+    }
 
-      switch (res.status) {
-        case 301:
-          lookup.redirect = `github:${res.headers.get('location').split('/').splice(3).join('/')}`;
-          return true;
-        
-        // it might be a private repo, so wait for the lookup to fail as well
-        case 200:
-        case 404:
-        case 302:
-        break
+    switch (res.status) {
+      case 301:
+        lookup.redirect = `github:${res.headers.get('location').split('/').splice(3).join('/')}`;
+        return true;
+      
+      // it might be a private repo, so wait for the lookup to fail as well
+      case 200:
+      case 404:
+      case 302:
+      break
 
-        case 401:
-          var e = new Error(`Invalid GitHub authentication details. Run ${this.util.bold(`jspm registry config github`)} to configure.`);
-          e.hideStack = true;
-          throw e;
+      case 401:
+        var e = new Error(`Invalid GitHub authentication details. Run ${this.util.bold(`jspm registry config github`)} to configure.`);
+        e.hideStack = true;
+        throw e;
 
-        default:
-          throw new Error(`Invalid status code ${res.status}: ${res.statusText}`);
-      }
+      default:
+        throw new Error(`Invalid status code ${res.status}: ${res.statusText}`);
     }
 
     // cache lookups per package for process execution duration
