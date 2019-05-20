@@ -350,9 +350,9 @@ Make sure that git is locally configured with permissions to ${this.githubUrl} o
           default:
             apiWarn(this.util, `Invalid GitHub API response code ${res.status}`);
         }
-        function apiWarn (util, msg) {
-          util.warn(`${msg} attempting to preload dependencies for ${packageName}.`);
-        }
+        const apiWarn = (util, msg) => {
+          util.log.warn(`${msg} attempting to preload dependencies for ${packageName}.`);
+        };
       }
 
       versionEntry.meta.resolved = hash;
