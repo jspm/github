@@ -430,9 +430,9 @@ GithubLocation.prototype = {
         apiWarned = true;
       }
       
-      if (res.headers.status.match(/^401/))
+      if (res.statusCode === 401)
         return apiFailWarn('lack of authorization', true);
-      if (res.headers.status.match(/^406/))
+      if (res.statusCode === 406)
         return apiFailWarn('insufficient permissions. Ensure you have public_repo access.');
       if (res.headers['x-ratelimit-remaining'] == '0') {
         if (self.auth)
