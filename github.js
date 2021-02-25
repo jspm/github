@@ -297,6 +297,23 @@ function checkRateLimit(statusCode, headers) {
   return Promise.reject(err);
 }
 
+function buildRequestQueryParams(obj) {
+  var serialize = function(obj) {
+    var str = [];
+    for (var p in obj)
+      if (obj.hasOwnProperty(p)) {
+        str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
+      }
+    return str.join("&");
+  }
+  
+  if (this.authSuffix)
+  {
+    return this.authSuffix + "&" + serialize(obj)
+  }
+
+  return "?" + serialize(obj)
+}
 
 // static configuration function
 GithubLocation.configure = function(config, ui) {
@@ -740,7 +757,7 @@ GithubLocation.prototype = {
   checkReleases: function(repo, version) {
     // NB cache this on disk with etags
     var reqOptions = extend({
-      uri: this.apiRemoteString + 'repos/' + repo + '/releases' + this.authSuffix,
+      uri: this.apiRemoteString + 'repos/' + repo + '/releases' + buildRequestQueryParams.call(this, { per_page: 100 }),
       headers: {
         'User-Agent': 'jspm',
         'Accept': 'application/vnd.github.v3+json'
