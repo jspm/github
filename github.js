@@ -235,11 +235,10 @@ function configureCredentials(config, ui) {
 
       return asp(request)({
         uri: remotes.apiRemoteString + 'user',
-        headers: {
+        headers: Object.assign({
           'User-Agent': 'jspm',
-          'Accept': 'application/vnd.github.v3+json',
-          ...remotes.authHeader
-        },
+          'Accept': 'application/vnd.github.v3+json'
+        }, removes.authHeader),
         followRedirect: false,
         strictSSL: 'strictSSL' in config ? config.strictSSL : true
       });
@@ -362,10 +361,9 @@ GithubLocation.prototype = {
     return new Promise(function(resolve, reject) {
       request(extend({
         uri: remoteString + repo,
-        headers: {
-          'User-Agent': 'jspm',
-          ...authHeader
-        },
+        headers: Object.assign({
+          'User-Agent': 'jspm'
+        }, authHeader),
         followRedirect: false
       }, self.defaultRequestOptions
       ))
@@ -461,11 +459,10 @@ GithubLocation.prototype = {
 
     return asp(request)(extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/contents/package.json',
-      headers: {
+      headers: Object.assign({
         'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.v3.raw',
-        ...this.authHeader
-      },
+        'Accept': 'application/vnd.github.v3.raw'
+      }, this.authHeader),
       qs: {
         ref: version
       }
@@ -670,11 +667,10 @@ GithubLocation.prototype = {
         // now that the inPipe is ready, do the request
         request(extend({
           uri: release.url,
-          headers: {
+          headers: Object.assign({
             'accept': 'application/octet-stream',
-            'user-agent': 'jspm',
-            ...authHeader
-          },
+            'user-agent': 'jspm'
+          }, authHeader),
           followRedirect: false,
         }, self.defaultRequestOptions
         )).on('response', function(archiveRes) {
@@ -720,10 +716,9 @@ GithubLocation.prototype = {
       return new Promise(function(resolve, reject) {
         request(extend({
           uri: remoteString + repo + '/archive/' + version + '.tar.gz',
-          headers: {
-            'accept': 'application/octet-stream',
-            ...authHeader
-          },
+          headers: Object.assign({
+            'accept': 'application/octet-stream'
+          }, authHeader),
         }, self.defaultRequestOptions
         ))
         .on('response', function(pkgRes) {
@@ -761,11 +756,10 @@ GithubLocation.prototype = {
     // NB cache this on disk with etags
     var reqOptions = extend({
       uri: this.apiRemoteString + 'repos/' + repo + '/releases' + buildRequestQueryParams.call(this, { per_page: 100 }),
-      headers: {
+      headers: Object.assign({
         'User-Agent': 'jspm',
-        'Accept': 'application/vnd.github.v3+json',
-        ...this.authHeader
-      },
+        'Accept': 'application/vnd.github.v3+json'
+      }, this.authHeader),
       followRedirect: false
     }, this.defaultRequestOptions);
 
