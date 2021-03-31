@@ -238,7 +238,7 @@ function configureCredentials(config, ui) {
         headers: Object.assign({
           'User-Agent': 'jspm',
           'Accept': 'application/vnd.github.v3+json'
-        }, removes.authHeader),
+        }, remotes.authHeader),
         followRedirect: false,
         strictSSL: 'strictSSL' in config ? config.strictSSL : true
       });
