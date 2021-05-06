@@ -89,7 +89,7 @@ function readNetrc(hostname) {
 }
 
 function isGithubToken(token) {
-  return token && token.match(/[0-9a-f]{40}/);
+  return token && token.match(/[0-9a-zA-Z_]{40,255}/);
 }
 
 var GithubLocation = function(options, ui) {
