@@ -5,6 +5,10 @@
   "main": "github.js",
   "author": "Guy Bedford",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jspm/github.git"
+  },
   "homepage": "https://github.com/jspm/github",
   "dependencies": {
     "sver": "^1.6.0"
