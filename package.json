@@ -12,5 +12,6 @@
   "homepage": "https://github.com/jspm/github",
   "dependencies": {
     "sver": "^1.6.0"
+    "tar": "^4.4.18"
   }
 }
